@@ -1,0 +1,14 @@
+# Raw dataset archive
+archive.zip
+dataset anemia/
+
+# Processed image/mask outputs (large binaries, regenerable from archive.zip)
+data/processed/images/
+data/processed/masks/
+
+# Python virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
