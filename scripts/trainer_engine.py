@@ -7,9 +7,15 @@ train_resunet.py) each just import run_study() and pass in their own model
 -- no shared file needs editing to pick which architecture trains, which
 matters when execution happens on a remote notebook (Kaggle) rather than
 this local environment.
+
+Persists everything a Kaggle background run would otherwise lose when the
+session ends: the best model's weights (outputs/checkpoints/) and the full
+per-trial metrics plus a best-trial summary (outputs/logs/).
 """
 
+import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import optuna
@@ -40,6 +46,10 @@ SEED = 42
 MAX_EPOCHS = 30
 EARLY_STOPPING_PATIENCE = 5
 N_TRIALS = 5
+
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+CHECKPOINTS_DIR = OUTPUTS_DIR / "checkpoints"
+LOGS_DIR = OUTPUTS_DIR / "logs"
 
 
 # --------------------------------------------------------------------------
@@ -111,9 +121,18 @@ def evaluate(model, loader, criterion, device, threshold: float = 0.5):
 def make_objective(model_cls, model_name: str):
     """Builds an Optuna objective(trial) closure bound to a specific model
     class/name, so the same engine can drive any segmentation architecture
-    that follows the (in_channels=3, out_channels=1) -> raw-logits contract."""
+    that follows the (in_channels=3, out_channels=1) -> raw-logits contract.
+
+    The closure also owns a `best_overall_dice` value that persists across
+    every trial of the study (not just within one trial), so the checkpoint
+    written to disk is always the single best-performing model seen across
+    the whole search -- not just the last trial's own local best."""
+    CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = CHECKPOINTS_DIR / f"best_{model_name}.pth"
+    best_overall_dice = 0.0
 
     def objective(trial: optuna.Trial) -> float:
+        nonlocal best_overall_dice
         learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
         weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
 
@@ -149,6 +168,14 @@ def make_objective(model_cls, model_name: str):
             if val_dice > best_val_dice:
                 best_val_dice = val_dice
                 best_val_iou = val_iou
+
+                if val_dice > best_overall_dice:
+                    best_overall_dice = val_dice
+                    torch.save(model.state_dict(), checkpoint_path)
+                    print(
+                        f"[{model_name} | Trial {trial.number}] New best overall "
+                        f"val_dice={val_dice:.4f} -> saved {checkpoint_path}"
+                    )
 
             print(
                 f"[{model_name} | Trial {trial.number}] Epoch {epoch:>2}/{MAX_EPOCHS} - "
@@ -196,4 +223,33 @@ def run_study(model_cls, model_name: str, n_trials: int = N_TRIALS) -> optuna.St
     for key, value in study.best_params.items():
         print(f"  {key}: {value}")
 
+    _save_outputs(study, model_name)
     return study
+
+
+def _save_outputs(study: optuna.Study, model_name: str) -> None:
+    """Persists everything needed to reconstruct this run's results after a
+    Kaggle session ends: every trial's params/value/user_attrs as a CSV, and
+    a compact JSON summary of the best trial (including where its checkpoint
+    was written by make_objective, so both files can be cross-referenced)."""
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+    trials_csv_path = LOGS_DIR / f"{model_name}_trials.csv"
+    study.trials_dataframe().to_csv(trials_csv_path, index=False)
+
+    summary = {
+        "model_name": model_name,
+        "n_trials_run": len(study.trials),
+        "best_trial_number": study.best_trial.number,
+        "best_val_dice": study.best_value,
+        "best_val_iou": study.best_trial.user_attrs["best_val_iou"],
+        "best_params": study.best_params,
+        "checkpoint_path": str(CHECKPOINTS_DIR / f"best_{model_name}.pth"),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    summary_json_path = LOGS_DIR / f"{model_name}_study_summary.json"
+    with open(summary_json_path, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    print(f"\nSaved per-trial metrics to {trials_csv_path}")
+    print(f"Saved best-trial summary to {summary_json_path}")

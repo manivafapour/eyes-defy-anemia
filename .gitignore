@@ -18,3 +18,8 @@ clean_map.txt
 folder_map.txt
 folder_map_utf8.txt
 data/processed/eyes_processed_data.zip
+
+# Trained model checkpoints (large binaries, regenerable by retraining;
+# outputs/logs/ metrics CSV/JSON are NOT ignored -- those are small and
+# worth keeping in version control)
+outputs/checkpoints/

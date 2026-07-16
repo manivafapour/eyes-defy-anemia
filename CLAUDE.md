@@ -175,6 +175,14 @@ The trial's objective value returned to Optuna is the **best (maximum) validatio
 ### 3.4 Execution plan
 `optuna.create_study(direction="maximize", sampler=TPESampler(seed=42))` followed by `study.optimize(objective, n_trials=5)` — a 5-trial smoke test intended to validate the pipeline mechanics (timing, metric tracking, hyperparameter proposal behavior) before committing to a larger search budget.
 
+### 3.4a Output persistence
+Added specifically because training runs on a remote, ephemeral Kaggle session: anything not written to disk before the session ends is unrecoverable. `run_study()` now persists, per model:
+- **`outputs/checkpoints/best_{model_name}.pth`** — the state dict of whichever epoch, across *all* trials in the study (not just the final trial), achieved the highest validation Dice. Tracked via a `best_overall_dice` value held in the `make_objective()` closure, which persists across every trial Optuna runs against that closure instance.
+- **`outputs/logs/{model_name}_trials.csv`** — the full per-trial record (`study.trials_dataframe()`: params, value, user attributes, state, duration) for every trial in the study.
+- **`outputs/logs/{model_name}_study_summary.json`** — a compact summary of the winning trial (number, Dice, IoU, hyperparameters, checkpoint path, UTC timestamp).
+
+`outputs/checkpoints/` is `.gitignore`'d (large binaries, regenerable by retraining); `outputs/logs/` is not — those files are small and are meant to be committed as part of the experimental record.
+
 ### 3.5 Local execution (partial, interrupted)
 This 5-trial smoke test was started locally against Model 1 (Standard U-Net) on the RTX 4050. The process was killed (session/agent teardown between conversation turns) partway through Trial 4, before the script's own final "best trial" summary printed. Because Python fully buffers stdout when it is redirected to a file (rather than a terminal), the per-epoch `print()` lines (train/val loss, Dice, IoU) for the in-progress run were lost when the process was killed — only Optuna's own trial-completion log lines survived, since Optuna's logger flushes independently of the script's buffered prints. The following is the complete, real data recovered from that run:
 
