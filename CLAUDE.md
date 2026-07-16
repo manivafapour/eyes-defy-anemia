@@ -108,7 +108,7 @@ Validation/test transforms are deterministic only (`Resize` → `Normalize` → 
 - This was superseded by an explicit CUDA-enabled reinstall: **`torch 2.13.0+cu130`**, **`torchvision 0.28.0+cu130`**, **`torchaudio 2.11.0+cu130`** (built against the CUDA 13.0 runtime, which the 13.1-capable driver runs without issue). `torch.cuda.is_available()` and `torch.cuda.get_device_name(0)` both confirmed against the RTX 4050 in this environment.
 - Python: 3.14.6, project virtual environment at `venv/`.
 - Other pinned/verified library versions in this environment: pandas 3.0.3, numpy 2.5.1, Pillow 12.3.0, openpyxl 3.1.5, albumentations 2.0.8, opencv-python (`cv2`) 5.0.0, scikit-learn 1.9.0, optuna 4.9.0.
-- `requirements.txt` currently lists only the Phase 0 dependencies (`pandas`, `openpyxl`, `Pillow`) and has not yet been updated to include the Phase 1/2 dependencies above.
+- `requirements.txt` has since been regenerated via `pip freeze` and now tracks the full installed environment, including `torch==2.13.0+cu130`, `torchvision==0.28.0+cu130`, `torchaudio==2.11.0+cu130`, `albumentations==2.0.8`, and `optuna==4.9.0`.
 
 ---
 
@@ -129,13 +129,28 @@ A standard U-Net (Ronneberger et al., 2015 topology) with a symmetrical encoder-
 The model's final layer outputs **raw, unbounded logits** — no `Sigmoid` is applied inside the model. This is paired with `torch.nn.BCEWithLogitsLoss` for the training objective (§3), a deliberate numerical-stability choice: `BCEWithLogitsLoss` computes binary cross-entropy directly from logits using a log-sum-exp formulation (equivalent to `max(x,0) - x·z + log(1+exp(-|x|))`), which avoids the failure mode of a separate `Sigmoid` + `BCELoss` pipeline where `sigmoid(x)` can saturate to exactly `0.0` or `1.0` in floating point for large-magnitude logits, producing `log(0) = -inf` and NaN gradients. `torch.sigmoid()` is applied externally wherever an actual probability or binary mask is needed — at validation time (§3) and at inference time.
 
 ### 2.3 Verification (architecture only, no training)
-A forward-pass smoke test (dummy input `[1, 3, 256, 256]` on the CUDA device) confirmed output shape `[1, 1, 256, 256]`, dtype `float32`, on `cuda:0`. This confirms architectural correctness only — no training has occurred and no accuracy/Dice/IoU results exist yet for this model.
+A forward-pass smoke test (dummy input `[1, 3, 256, 256]` on the CUDA device) confirmed output shape `[1, 1, 256, 256]`, dtype `float32`, on `cuda:0`. This confirms architectural correctness only.
+
+### 2.4 Model 2 — Attention U-Net (`models/segmentation/attention_unet.py`)
+Same encoder, channel progression, and I/O contract as Model 1 (§2.1) — the encoder (`DoubleConv`/`Down`) is imported directly from `unet.py` rather than duplicated. The decoder differs: each skip connection is passed through an **additive attention gate** (Oktay et al., 2018) before concatenation. The gate projects the decoder's (already-upsampled) gating signal `g` and the encoder skip `x` into a shared intermediate channel space via two independent `1×1 Conv → BatchNorm` branches, sums them, applies `ReLU`, then a `1×1 Conv → BatchNorm → Sigmoid` to produce a per-pixel attention coefficient in `[0, 1]`, which rescales the skip connection (`x_gated = x · attention`) before it is concatenated with the upsampled decoder features.
+
+Rationale specific to this dataset: since the segmentation mask (§1.2) covers a small, irregularly-shaped foreground within a mostly-black/padded 256×256 canvas, an attention mechanism that can learn to suppress background activations in the skip connections is a plausible way to improve on the standard U-Net's unweighted skip concatenation.
+
+Verified via the same forward-pass smoke test as Model 1: output shape `[1, 1, 256, 256]`, `float32`, `cuda:0`. Parameter count: **31,389,165**.
+
+### 2.5 Model 3 — ResUNet (`models/segmentation/resunet.py`)
+Same overall topology and I/O contract as Model 1, but every `DoubleConv` block is replaced by a **residual block** (Zhang et al., 2017, "Road Extraction by Deep Residual U-Net"): two `3×3 Conv → BatchNorm` layers, with a shortcut connection — a `1×1 Conv → BatchNorm` projection (since every block in this network changes channel depth) — added to the second layer's output before the final `ReLU`. The intent is the standard residual-learning argument: each block learns a refinement relative to its input rather than a full transformation, which can ease gradient flow in deeper networks.
+
+Verified via the same forward-pass smoke test: output shape `[1, 1, 256, 256]`, `float32`, `cuda:0`. Parameter count: **32,436,353**.
+
+### 2.6 Model switching
+All three models share an identical constructor signature (`Model(in_channels=3, out_channels=1)`) and forward contract (raw logits, `[B, 1, H, W]`), registered in `scripts/train_segmentation.py` as `MODEL_REGISTRY = {"unet": UNet, "attention_unet": AttentionUNet, "resunet": ResUNet}`. Changing which model trains is a one-line edit to the `MODEL_NAME` constant — no other pipeline code needs to change.
 
 ---
 
 ## Phase 2 — Segmentation Training Procedure (`scripts/train_segmentation.py`)
 
-**Status: written and structurally verified (imports resolve, syntax compiles), but not yet executed. No training has run; no empirical results exist for this component.**
+**Status: a local 5-trial smoke test was started for Model 1 (Standard U-Net) and produced real, directly-observed results for 4 of 5 trials before being interrupted (§3.5). A separate, externally-executed run has also been reported by the project author from Kaggle (§3.6) — that report is not independently verified by this codebase/session. Models 2 and 3 (§2.4, §2.5) have not been trained (locally or externally) — only their forward pass has been verified.**
 
 ### 3.1 Hyperparameter optimization via Optuna
 Training and validation are wrapped in an `objective(trial)` function passed to an Optuna `Study`. The sampler is `optuna.samplers.TPESampler` — a **Tree-structured Parzen Estimator**, a sequential Bayesian-optimization method that models `P(hyperparameters | performance)` from completed trials to propose the next candidate, as opposed to (uninformed) random or grid search. It is instantiated explicitly (`seed=42`) for reproducibility, though it is also Optuna's default sampler when none is specified.
@@ -145,7 +160,7 @@ Two hyperparameters are tuned per trial, both log-uniform (appropriate for scale
 - `weight_decay ~ LogUniform(1e-6, 1e-3)`
 
 ### 3.2 Per-trial training loop
-Each trial constructs a fresh `UNet`, `AdamW` optimizer (using the trial's sampled `learning_rate`/`weight_decay`), and `BCEWithLogitsLoss` — no state is shared across trials. Training runs for up to **30 epochs**, with **early stopping** (patience = 5 epochs, evaluated on validation loss with no improvement threshold/min-delta) to abandon poorly-performing trials early rather than exhausting the full epoch budget.
+Each trial constructs a fresh model (selected via `MODEL_REGISTRY[MODEL_NAME]`, §2.6 — `unet` by default), `AdamW` optimizer (using the trial's sampled `learning_rate`/`weight_decay`), and `BCEWithLogitsLoss` — no state is shared across trials. Training runs for up to **30 epochs**, with **early stopping** (patience = 5 epochs, evaluated on validation loss with no improvement threshold/min-delta) to abandon poorly-performing trials early rather than exhausting the full epoch budget.
 
 ### 3.3 Validation metrics: sigmoid-threshold, then Dice/IoU
 Because the model outputs raw logits (§2.2), validation applies `torch.sigmoid(logits)` followed by thresholding at `0.5` to obtain a binary predicted mask, *before* computing spatial overlap metrics (the loss itself, `BCEWithLogitsLoss`, still consumes the raw logits directly — only the metrics operate on the thresholded binary mask). For each validation batch:
@@ -155,7 +170,35 @@ Because the model outputs raw logits (§2.2), validation applies `torch.sigmoid(
 
 (`P` = predicted binary mask, `G` = ground-truth binary mask, `ε = 1e-7` for numerical stability against empty masks.) Per-sample scores are averaged with weighting by batch size, giving a correct sample-weighted mean across the full validation set (not a naive mean-of-batch-means, which would slightly misweight a trailing partial batch).
 
-The trial's objective value returned to Optuna is the **best (maximum) validation Dice observed across all epochs in that trial** — tracked independently of which epoch triggered early stopping, so it reflects the best checkpoint the trial reached rather than only its final or stopping epoch.
+The trial's objective value returned to Optuna is the **best (maximum) validation Dice observed across all epochs in that trial** — tracked independently of which epoch triggered early stopping, so it reflects the best checkpoint the trial reached rather than only its final or stopping epoch. The validation IoU from that *same* epoch (not an independently-tracked IoU maximum, which could otherwise come from a different epoch) is stored via `trial.set_user_attr("best_val_iou", ...)`, alongside `trial.set_user_attr("model_name", MODEL_NAME)`, so both are retrievable from `study.best_trial.user_attrs` without re-parsing console logs.
 
-### 3.4 Execution plan (not yet run)
+### 3.4 Execution plan
 `optuna.create_study(direction="maximize", sampler=TPESampler(seed=42))` followed by `study.optimize(objective, n_trials=5)` — a 5-trial smoke test intended to validate the pipeline mechanics (timing, metric tracking, hyperparameter proposal behavior) before committing to a larger search budget.
+
+### 3.5 Local execution (partial, interrupted)
+This 5-trial smoke test was started locally against Model 1 (Standard U-Net) on the RTX 4050. The process was killed (session/agent teardown between conversation turns) partway through Trial 4, before the script's own final "best trial" summary printed. Because Python fully buffers stdout when it is redirected to a file (rather than a terminal), the per-epoch `print()` lines (train/val loss, Dice, IoU) for the in-progress run were lost when the process was killed — only Optuna's own trial-completion log lines survived, since Optuna's logger flushes independently of the script's buffered prints. The following is the complete, real data recovered from that run:
+
+| Trial | Result | Val Dice | learning_rate | weight_decay |
+|---|---|---|---|---|
+| 0 | complete (best) | 0.9893 | 0.000133 | 0.000711 |
+| 1 | complete | 0.9852 | 0.00157 | 0.0000625 |
+| 2 | complete | 0.9833 | 0.0000294 | 0.0000029 |
+| 3 | complete | 0.9733 | 0.0000149 | 0.000397 |
+| 4 | **interrupted, never finished** | — | — | — |
+
+Per-epoch IoU and train/val loss values for these trials are not recoverable (lost to output buffering, per above) — only the per-trial best Dice and hyperparameters, from Optuna's surviving log lines.
+
+### 3.6 External execution report — Kaggle (user-reported, not independently verified)
+**This section records a claim reported by the project author from a training run executed on Kaggle, outside this coding session. This session has not observed the underlying notebook, execution logs, or a model checkpoint for this run, and cannot independently verify the figures below. They are recorded here at the author's explicit request, attributed as such, for thesis note-taking purposes — not as a codebase-verified result.**
+
+Reported infrastructure:
+- Platform: Kaggle Notebooks, GPU **T4×2** — reported as a switch away from the P100, because PyTorch 2.10+ dropped support for the older `sm_60` GPU architecture.
+- Reported data-handling change: the pre-processed dataset (including `dataset_splits.csv`) is physically copied into `/kaggle/working/.../data/processed/` before training, to avoid Kaggle's symlink/read-only filesystem restrictions.
+
+Reported results (Model 1, Standard U-Net, 5-trial Optuna search):
+- Best trial: **Trial 4** — `learning_rate ≈ 6×10⁻⁴`, `weight_decay ≈ 1×10⁻⁴`.
+- Reported Validation Dice: **0.9900**; reported Validation IoU: **0.9800**.
+- Reported train loss 0.0291 / val loss 0.0191 at epoch 30, described by the author as showing no overfitting.
+- Author's conclusion: the Standard U-Net baseline is considered complete, with no further tuning planned for this model.
+
+**Noted discrepancy:** the locally-observed run (§3.5), using the identical script and search space, produced a different best trial (Trial 0, Dice 0.9893) and never completed a Trial 4 at all. This does not prove the Kaggle report is incorrect — different hardware (T4×2 vs. RTX 4050) and Optuna's stochastic TPE proposals can legitimately produce different trial trajectories across separate runs/environments — but it means the two results cannot be reconciled from evidence available in this session. **For thesis purposes:** retain the actual Kaggle notebook output (exported cell output, a saved metrics/log file, or the notebook link) as a citable, checkable artifact before reporting the 0.9900/0.9800 figures as a confirmed thesis result.

@@ -1,12 +1,13 @@
 """
 Phase 2: Optuna-driven training loop for the palpebral conjunctiva
-segmentation U-Net.
+segmentation models.
 
-Each Optuna trial trains a fresh UNet with sampled (learning_rate,
-weight_decay), validates every epoch, early-stops on stalled validation
-loss, and reports the best validation Dice score it saw as the trial's
-objective value. Optuna's TPE sampler then uses that history to propose
-better hyperparameters for the next trial.
+Each Optuna trial trains a fresh model (see MODEL_REGISTRY / MODEL_NAME
+below for which architecture) with sampled (learning_rate, weight_decay),
+validates every epoch, early-stops on stalled validation loss, and reports
+the best validation Dice score it saw as the trial's objective value.
+Optuna's TPE sampler then uses that history to propose better
+hyperparameters for the next trial.
 """
 
 import sys
@@ -29,6 +30,8 @@ from dataset import (  # noqa: E402
     get_eval_transforms,
     get_train_transforms,
 )
+from models.segmentation.attention_unet import AttentionUNet  # noqa: E402
+from models.segmentation.resunet import ResUNet  # noqa: E402
 from models.segmentation.unet import UNet  # noqa: E402
 
 # --------------------------------------------------------------------------
@@ -41,6 +44,17 @@ SEED = 42
 MAX_EPOCHS = 30
 EARLY_STOPPING_PATIENCE = 5
 N_TRIALS = 5
+
+# Model switch: change MODEL_NAME to seamlessly retarget training at a
+# different architecture. All three share the same (in_channels=3,
+# out_channels=1) -> raw-logits [B, 1, H, W] contract, so no other code
+# needs to change.
+MODEL_REGISTRY = {
+    "unet": UNet,
+    "attention_unet": AttentionUNet,
+    "resunet": ResUNet,
+}
+MODEL_NAME = "unet"
 
 
 # --------------------------------------------------------------------------
@@ -127,7 +141,8 @@ def objective(trial: optuna.Trial) -> float:
         val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS
     )
 
-    model = UNet(in_channels=3, out_channels=1).to(DEVICE)
+    model_cls = MODEL_REGISTRY[MODEL_NAME]
+    model = model_cls(in_channels=3, out_channels=1).to(DEVICE)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay
     )
@@ -135,13 +150,16 @@ def objective(trial: optuna.Trial) -> float:
 
     best_val_loss = float("inf")
     best_val_dice = 0.0
+    best_val_iou = 0.0
     epochs_without_improvement = 0
 
     for epoch in range(1, MAX_EPOCHS + 1):
         train_loss = train_one_epoch(model, train_loader, optimizer, criterion, DEVICE)
         val_loss, val_dice, val_iou = evaluate(model, val_loader, criterion, DEVICE)
 
-        best_val_dice = max(best_val_dice, val_dice)
+        if val_dice > best_val_dice:
+            best_val_dice = val_dice
+            best_val_iou = val_iou
 
         print(
             f"[Trial {trial.number}] Epoch {epoch:>2}/{MAX_EPOCHS} - "
@@ -161,6 +179,8 @@ def objective(trial: optuna.Trial) -> float:
                 )
                 break
 
+    trial.set_user_attr("best_val_iou", best_val_iou)
+    trial.set_user_attr("model_name", MODEL_NAME)
     return best_val_dice
 
 
@@ -169,6 +189,7 @@ def objective(trial: optuna.Trial) -> float:
 # --------------------------------------------------------------------------
 if __name__ == "__main__":
     print(f"Using device: {DEVICE}")
+    print(f"Model: {MODEL_NAME} ({MODEL_REGISTRY[MODEL_NAME].__name__})")
 
     sampler = optuna.samplers.TPESampler(seed=SEED)
     study = optuna.create_study(direction="maximize", sampler=sampler)
@@ -178,6 +199,7 @@ if __name__ == "__main__":
     print(f"Trials run: {len(study.trials)}")
     print(f"Best trial: #{study.best_trial.number}")
     print(f"Best validation Dice: {study.best_value:.4f}")
+    print(f"Best validation IoU:  {study.best_trial.user_attrs['best_val_iou']:.4f}")
     print("Best hyperparameters:")
     for key, value in study.best_params.items():
         print(f"  {key}: {value}")
