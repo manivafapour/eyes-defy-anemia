@@ -1,13 +1,12 @@
 """
-Phase 2: Optuna-driven training loop for the palpebral conjunctiva
-segmentation models.
-
-Each Optuna trial trains a fresh model (see MODEL_REGISTRY / MODEL_NAME
-below for which architecture) with sampled (learning_rate, weight_decay),
-validates every epoch, early-stops on stalled validation loss, and reports
-the best validation Dice score it saw as the trial's objective value.
-Optuna's TPE sampler then uses that history to propose better
-hyperparameters for the next trial.
+Shared Optuna training engine for the palpebral conjunctiva segmentation
+models. Model-agnostic by design: it takes a model class and a name and
+runs the full 5-trial hyperparameter search against them. The per-model
+entry-point scripts (train_standard_unet.py, train_attention_unet.py,
+train_resunet.py) each just import run_study() and pass in their own model
+-- no shared file needs editing to pick which architecture trains, which
+matters when execution happens on a remote notebook (Kaggle) rather than
+this local environment.
 """
 
 import sys
@@ -30,9 +29,6 @@ from dataset import (  # noqa: E402
     get_eval_transforms,
     get_train_transforms,
 )
-from models.segmentation.attention_unet import AttentionUNet  # noqa: E402
-from models.segmentation.resunet import ResUNet  # noqa: E402
-from models.segmentation.unet import UNet  # noqa: E402
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -44,17 +40,6 @@ SEED = 42
 MAX_EPOCHS = 30
 EARLY_STOPPING_PATIENCE = 5
 N_TRIALS = 5
-
-# Model switch: change MODEL_NAME to seamlessly retarget training at a
-# different architecture. All three share the same (in_channels=3,
-# out_channels=1) -> raw-logits [B, 1, H, W] contract, so no other code
-# needs to change.
-MODEL_REGISTRY = {
-    "unet": UNet,
-    "attention_unet": AttentionUNet,
-    "resunet": ResUNet,
-}
-MODEL_NAME = "unet"
 
 
 # --------------------------------------------------------------------------
@@ -121,81 +106,88 @@ def evaluate(model, loader, criterion, device, threshold: float = 0.5):
 
 
 # --------------------------------------------------------------------------
-# Optuna objective
+# Optuna objective factory
 # --------------------------------------------------------------------------
-def objective(trial: optuna.Trial) -> float:
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
-    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
+def make_objective(model_cls, model_name: str):
+    """Builds an Optuna objective(trial) closure bound to a specific model
+    class/name, so the same engine can drive any segmentation architecture
+    that follows the (in_channels=3, out_channels=1) -> raw-logits contract."""
 
-    train_dataset = ConjunctivaSegmentationDataset(
-        split="train", splits_csv=SPLITS_CSV, transform=get_train_transforms()
-    )
-    val_dataset = ConjunctivaSegmentationDataset(
-        split="val", splits_csv=SPLITS_CSV, transform=get_eval_transforms()
-    )
+    def objective(trial: optuna.Trial) -> float:
+        learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
+        weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
 
-    train_loader = DataLoader(
-        train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS
-    )
-    val_loader = DataLoader(
-        val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS
-    )
-
-    model_cls = MODEL_REGISTRY[MODEL_NAME]
-    model = model_cls(in_channels=3, out_channels=1).to(DEVICE)
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
-    )
-    criterion = nn.BCEWithLogitsLoss()
-
-    best_val_loss = float("inf")
-    best_val_dice = 0.0
-    best_val_iou = 0.0
-    epochs_without_improvement = 0
-
-    for epoch in range(1, MAX_EPOCHS + 1):
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, DEVICE)
-        val_loss, val_dice, val_iou = evaluate(model, val_loader, criterion, DEVICE)
-
-        if val_dice > best_val_dice:
-            best_val_dice = val_dice
-            best_val_iou = val_iou
-
-        print(
-            f"[Trial {trial.number}] Epoch {epoch:>2}/{MAX_EPOCHS} - "
-            f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
-            f"val_dice={val_dice:.4f} val_iou={val_iou:.4f}"
+        train_dataset = ConjunctivaSegmentationDataset(
+            split="train", splits_csv=SPLITS_CSV, transform=get_train_transforms()
+        )
+        val_dataset = ConjunctivaSegmentationDataset(
+            split="val", splits_csv=SPLITS_CSV, transform=get_eval_transforms()
         )
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            epochs_without_improvement = 0
-        else:
-            epochs_without_improvement += 1
-            if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
-                print(
-                    f"[Trial {trial.number}] Early stopping at epoch {epoch} "
-                    f"(no val_loss improvement for {EARLY_STOPPING_PATIENCE} epochs)."
-                )
-                break
+        train_loader = DataLoader(
+            train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS
+        )
+        val_loader = DataLoader(
+            val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS
+        )
 
-    trial.set_user_attr("best_val_iou", best_val_iou)
-    trial.set_user_attr("model_name", MODEL_NAME)
-    return best_val_dice
+        model = model_cls(in_channels=3, out_channels=1).to(DEVICE)
+        optimizer = torch.optim.AdamW(
+            model.parameters(), lr=learning_rate, weight_decay=weight_decay
+        )
+        criterion = nn.BCEWithLogitsLoss()
+
+        best_val_loss = float("inf")
+        best_val_dice = 0.0
+        best_val_iou = 0.0
+        epochs_without_improvement = 0
+
+        for epoch in range(1, MAX_EPOCHS + 1):
+            train_loss = train_one_epoch(model, train_loader, optimizer, criterion, DEVICE)
+            val_loss, val_dice, val_iou = evaluate(model, val_loader, criterion, DEVICE)
+
+            if val_dice > best_val_dice:
+                best_val_dice = val_dice
+                best_val_iou = val_iou
+
+            print(
+                f"[{model_name} | Trial {trial.number}] Epoch {epoch:>2}/{MAX_EPOCHS} - "
+                f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
+                f"val_dice={val_dice:.4f} val_iou={val_iou:.4f}"
+            )
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+                if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
+                    print(
+                        f"[{model_name} | Trial {trial.number}] Early stopping at epoch {epoch} "
+                        f"(no val_loss improvement for {EARLY_STOPPING_PATIENCE} epochs)."
+                    )
+                    break
+
+        trial.set_user_attr("best_val_iou", best_val_iou)
+        trial.set_user_attr("model_name", model_name)
+        return best_val_dice
+
+    return objective
 
 
 # --------------------------------------------------------------------------
-# Execution block
+# Study runner -- the single shared entry point every model-specific script calls
 # --------------------------------------------------------------------------
-if __name__ == "__main__":
+def run_study(model_cls, model_name: str, n_trials: int = N_TRIALS) -> optuna.Study:
     print(f"Using device: {DEVICE}")
-    print(f"Model: {MODEL_NAME} ({MODEL_REGISTRY[MODEL_NAME].__name__})")
+    print(f"Model: {model_name} ({model_cls.__name__})")
 
     sampler = optuna.samplers.TPESampler(seed=SEED)
     study = optuna.create_study(direction="maximize", sampler=sampler)
-    study.optimize(objective, n_trials=N_TRIALS)
+    study.optimize(make_objective(model_cls, model_name), n_trials=n_trials)
 
     print("\n--- Optuna study complete ---")
+    print(f"Model: {model_name}")
     print(f"Trials run: {len(study.trials)}")
     print(f"Best trial: #{study.best_trial.number}")
     print(f"Best validation Dice: {study.best_value:.4f}")
@@ -203,3 +195,5 @@ if __name__ == "__main__":
     print("Best hyperparameters:")
     for key, value in study.best_params.items():
         print(f"  {key}: {value}")
+
+    return study

@@ -144,11 +144,11 @@ Same overall topology and I/O contract as Model 1, but every `DoubleConv` block 
 Verified via the same forward-pass smoke test: output shape `[1, 1, 256, 256]`, `float32`, `cuda:0`. Parameter count: **32,436,353**.
 
 ### 2.6 Model switching
-All three models share an identical constructor signature (`Model(in_channels=3, out_channels=1)`) and forward contract (raw logits, `[B, 1, H, W]`), registered in `scripts/train_segmentation.py` as `MODEL_REGISTRY = {"unet": UNet, "attention_unet": AttentionUNet, "resunet": ResUNet}`. Changing which model trains is a one-line edit to the `MODEL_NAME` constant — no other pipeline code needs to change.
+All three models share an identical constructor signature (`Model(in_channels=3, out_channels=1)`) and forward contract (raw logits, `[B, 1, H, W]`). Training logic is not model-specific: the shared engine (`scripts/trainer_engine.py`, §3) takes a model class and name as arguments, and three thin per-model entry-point scripts (`scripts/train_standard_unet.py`, `scripts/train_attention_unet.py`, `scripts/train_resunet.py`) each just import the engine and call `run_study(model_cls=..., model_name=...)` with their own architecture. This replaced an earlier single-script `MODEL_REGISTRY`/`MODEL_NAME`-constant design — separate entry points were needed because execution happens on Kaggle, where editing a shared constant before each run isn't part of the workflow; a dedicated script per model can be run as-is.
 
 ---
 
-## Phase 2 — Segmentation Training Procedure (`scripts/train_segmentation.py`)
+## Phase 2 — Segmentation Training Procedure (`scripts/trainer_engine.py` + per-model entry points)
 
 **Status: a local 5-trial smoke test was started for Model 1 (Standard U-Net) and produced real, directly-observed results for 4 of 5 trials before being interrupted (§3.5). A separate, externally-executed run has also been reported by the project author from Kaggle (§3.6) — that report is not independently verified by this codebase/session. Models 2 and 3 (§2.4, §2.5) have not been trained (locally or externally) — only their forward pass has been verified.**
 
@@ -160,7 +160,7 @@ Two hyperparameters are tuned per trial, both log-uniform (appropriate for scale
 - `weight_decay ~ LogUniform(1e-6, 1e-3)`
 
 ### 3.2 Per-trial training loop
-Each trial constructs a fresh model (selected via `MODEL_REGISTRY[MODEL_NAME]`, §2.6 — `unet` by default), `AdamW` optimizer (using the trial's sampled `learning_rate`/`weight_decay`), and `BCEWithLogitsLoss` — no state is shared across trials. Training runs for up to **30 epochs**, with **early stopping** (patience = 5 epochs, evaluated on validation loss with no improvement threshold/min-delta) to abandon poorly-performing trials early rather than exhausting the full epoch budget.
+Each trial constructs a fresh model (the class/name passed into `run_study()` by whichever entry-point script called it, §2.6), `AdamW` optimizer (using the trial's sampled `learning_rate`/`weight_decay`), and `BCEWithLogitsLoss` — no state is shared across trials. Training runs for up to **30 epochs**, with **early stopping** (patience = 5 epochs, evaluated on validation loss with no improvement threshold/min-delta) to abandon poorly-performing trials early rather than exhausting the full epoch budget.
 
 ### 3.3 Validation metrics: sigmoid-threshold, then Dice/IoU
 Because the model outputs raw logits (§2.2), validation applies `torch.sigmoid(logits)` followed by thresholding at `0.5` to obtain a binary predicted mask, *before* computing spatial overlap metrics (the loss itself, `BCEWithLogitsLoss`, still consumes the raw logits directly — only the metrics operate on the thresholded binary mask). For each validation batch:
@@ -170,7 +170,7 @@ Because the model outputs raw logits (§2.2), validation applies `torch.sigmoid(
 
 (`P` = predicted binary mask, `G` = ground-truth binary mask, `ε = 1e-7` for numerical stability against empty masks.) Per-sample scores are averaged with weighting by batch size, giving a correct sample-weighted mean across the full validation set (not a naive mean-of-batch-means, which would slightly misweight a trailing partial batch).
 
-The trial's objective value returned to Optuna is the **best (maximum) validation Dice observed across all epochs in that trial** — tracked independently of which epoch triggered early stopping, so it reflects the best checkpoint the trial reached rather than only its final or stopping epoch. The validation IoU from that *same* epoch (not an independently-tracked IoU maximum, which could otherwise come from a different epoch) is stored via `trial.set_user_attr("best_val_iou", ...)`, alongside `trial.set_user_attr("model_name", MODEL_NAME)`, so both are retrievable from `study.best_trial.user_attrs` without re-parsing console logs.
+The trial's objective value returned to Optuna is the **best (maximum) validation Dice observed across all epochs in that trial** — tracked independently of which epoch triggered early stopping, so it reflects the best checkpoint the trial reached rather than only its final or stopping epoch. The validation IoU from that *same* epoch (not an independently-tracked IoU maximum, which could otherwise come from a different epoch) is stored via `trial.set_user_attr("best_val_iou", ...)`, alongside `trial.set_user_attr("model_name", model_name)` (the name passed into `make_objective()` by the calling entry-point script), so both are retrievable from `study.best_trial.user_attrs` without re-parsing console logs.
 
 ### 3.4 Execution plan
 `optuna.create_study(direction="maximize", sampler=TPESampler(seed=42))` followed by `study.optimize(objective, n_trials=5)` — a 5-trial smoke test intended to validate the pipeline mechanics (timing, metric tracking, hyperparameter proposal behavior) before committing to a larger search budget.
