@@ -12,3 +12,9 @@ venv/
 # Python cache
 __pycache__/
 *.pyc
+
+# Local backups / Kaggle upload-prep artifacts
+clean_map.txt
+folder_map.txt
+folder_map_utf8.txt
+data/processed/eyes_processed_data.zip
