@@ -28,3 +28,10 @@ Last updated: 2026-07-17
 4. **Re-run a domain-shift check** — does the aligned-trained model actually isolate tissue on a raw photo now? Don't skip this; it's the entire point of the pivot.
 5. Only after that: rebuild Phase 3 (real inference + cropping) against whichever model is confirmed to generalize.
 6. Phase 4 (classification) hasn't been started at all yet.
+
+## Update: training still collapsed after the BCEDiceLoss fix
+Kaggle report: `val_dice` still pinned at `0.0000`, `val_loss` stuck ~0.60–0.61, even with `BCEDiceLoss` in place. Before touching the loss/hyperparameters further, built `notebooks/verify_alignment_sanity_check.ipynb` to check whether `aligned_raw` masks are actually blank.
+
+**Result (executed against the local repo's data):** masks are **not** blank. Full scan of all 217 `aligned_raw` masks: 0 fully blank, 0 near-blank (<10 positive px), min positive pixels = 186, mean = 1094. Visual check on a fresh random patient (`Italy_069`, not previously hand-picked) shows the mask precisely on the correct tissue location, matching the original crop's shape.
+
+**Conclusion so far:** the data in *this local repo* is confirmed good — this specific collapse is not explained by blank/corrupted masks here. Two remaining hypotheses, not yet resolved: (a) what's actually on Kaggle (the uploaded `aligned_raw.zip` / the Kaggle copy script's target path) may not match what's in this repo right now — worth double-checking directly on Kaggle before assuming otherwise; (b) the extreme sparsity (foreground is well under 1% of most images) may need a stronger fix than 50/50 `BCEDiceLoss` alone (e.g. higher Dice weighting, a BCE `pos_weight`, or Focal loss) — `val_loss` ~0.6 is roughly consistent with the model still being mostly/fully collapsed even under the new loss. **Training engine has not been touched further per explicit instruction** — next move is the user's call once the Kaggle-side data is confirmed.
