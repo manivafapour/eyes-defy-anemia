@@ -9,6 +9,12 @@ dataset -- no shared file needs editing to pick which architecture or
 dataset trains, which matters when execution happens on a remote notebook
 (Kaggle) rather than this local environment.
 
+The loss function is also tuned by Optuna itself, not fixed per entry-point
+script: each trial samples trial.suggest_categorical("loss_fn", [...]) from
+LOSS_REGISTRY (currently "bce_dice" and "focal_tversky"), so a single study
+directly compares both across trials -- see _save_outputs' per-loss-function
+breakdown, and each loss gets its own best-checkpoint file.
+
 Persists everything a Kaggle background run would otherwise lose when the
 session ends: the best model's weights (outputs/checkpoints/) and the full
 per-trial metrics plus a best-trial summary (outputs/logs/).
@@ -99,6 +105,54 @@ class BCEDiceLoss(nn.Module):
         return self.bce_weight * self.bce(logits, targets) + (1 - self.bce_weight) * self.dice(logits, targets)
 
 
+class FocalTverskyLoss(nn.Module):
+    """Focal Tversky Loss (Abraham & Khan, 2018).
+
+    Tversky index: TI = (TP + eps) / (TP + alpha*FP + beta*FN + eps)
+    Focal Tversky:  FTL = (1 - TI) ** gamma
+
+    Generalizes Dice (alpha == beta == 0.5 reduces to it) with independent
+    false-positive/false-negative weights. beta > alpha (default 0.7 vs
+    0.3) penalizes false negatives more than false positives -- directly
+    countering the all-background collapse (every missed true-foreground
+    pixel is a false negative). gamma > 1 (default 4/3, the original
+    paper's value) down-weights already-easy samples so gradient
+    concentrates on poorly-segmented ones -- useful on this project's
+    202-patient aligned_raw set, whose foreground fraction is bimodal
+    (median ~4%, but a small Italy-crop cluster runs ~75%), not uniformly
+    sparse. Computed per-sample as a ratio, so unlike a global BCE
+    pos_weight it adapts automatically to each image's own sparsity."""
+
+    def __init__(self, alpha: float = 0.3, beta: float = 0.7, gamma: float = 4 / 3, eps: float = 1e-7):
+        super().__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.eps = eps
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        probs = torch.sigmoid(logits)
+        probs = probs.view(probs.size(0), -1)
+        targets = targets.view(targets.size(0), -1)
+
+        tp = (probs * targets).sum(dim=1)
+        fp = (probs * (1 - targets)).sum(dim=1)
+        fn = ((1 - probs) * targets).sum(dim=1)
+
+        tversky_index = (tp + self.eps) / (tp + self.alpha * fp + self.beta * fn + self.eps)
+        focal_tversky = (1 - tversky_index) ** self.gamma
+        return focal_tversky.mean()
+
+
+# Registry of loss functions available to the Optuna search (see
+# make_objective) -- keyed by the name that shows up as trial.params["loss_fn"]
+# and in the trials CSV as the "params_loss_fn" column.
+LOSS_REGISTRY = {
+    "bce_dice": BCEDiceLoss,
+    "focal_tversky": FocalTverskyLoss,
+}
+
+
 # --------------------------------------------------------------------------
 # Metrics
 # --------------------------------------------------------------------------
@@ -138,8 +192,9 @@ def train_one_epoch(model, loader, optimizer, criterion, device) -> float:
 @torch.no_grad()
 def evaluate(model, loader, criterion, device, threshold: float = 0.5):
     """Validation pass. Predictions are sigmoid(logits) thresholded at 0.5
-    into a binary mask before Dice/IoU are computed -- criterion (BCEDiceLoss)
-    itself still consumes raw logits directly, for numerical stability."""
+    into a binary mask before Dice/IoU are computed -- criterion (whichever
+    LOSS_REGISTRY entry this trial sampled) itself still consumes raw
+    logits directly, for numerical stability."""
     model.eval()
     total_loss = total_dice = total_iou = 0.0
     n_samples = 0
@@ -178,15 +233,22 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
     The closure also owns a `best_overall_dice` value that persists across
     every trial of the study (not just within one trial), so the checkpoint
     written to disk is always the single best-performing model seen across
-    the whole search -- not just the last trial's own local best."""
+    the whole search -- not just the last trial's own local best. It
+    additionally tracks a best-dice-per-loss-function dict, so each loss
+    function in LOSS_REGISTRY gets its own checkpoint too (see
+    best_{model_name}_{loss_fn}.pth) -- needed for a side-by-side
+    comparison, since the single "overall best" checkpoint alone would
+    hide whichever loss function didn't happen to win outright."""
     CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint_path = CHECKPOINTS_DIR / f"best_{model_name}.pth"
     best_overall_dice = 0.0
+    best_dice_per_loss_fn = {name: 0.0 for name in LOSS_REGISTRY}
 
     def objective(trial: optuna.Trial) -> float:
-        nonlocal best_overall_dice
+        nonlocal best_overall_dice, best_dice_per_loss_fn
         learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
         weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
+        loss_fn_name = trial.suggest_categorical("loss_fn", list(LOSS_REGISTRY.keys()))
 
         train_dataset = dataset_cls(
             split="train", splits_csv=SPLITS_CSV, transform=get_train_transforms()
@@ -206,7 +268,7 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
         optimizer = torch.optim.AdamW(
             model.parameters(), lr=learning_rate, weight_decay=weight_decay
         )
-        criterion = BCEDiceLoss()
+        criterion = LOSS_REGISTRY[loss_fn_name]()
 
         best_val_loss = float("inf")
         best_val_dice = 0.0
@@ -229,8 +291,17 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
                         f"val_dice={val_dice:.4f} -> saved {checkpoint_path}"
                     )
 
+                if val_dice > best_dice_per_loss_fn[loss_fn_name]:
+                    best_dice_per_loss_fn[loss_fn_name] = val_dice
+                    per_loss_checkpoint_path = CHECKPOINTS_DIR / f"best_{model_name}_{loss_fn_name}.pth"
+                    torch.save(model.state_dict(), per_loss_checkpoint_path)
+                    print(
+                        f"[{model_name} | Trial {trial.number}] New best for loss_fn={loss_fn_name} "
+                        f"val_dice={val_dice:.4f} -> saved {per_loss_checkpoint_path}"
+                    )
+
             print(
-                f"[{model_name} | Trial {trial.number}] Epoch {epoch:>2}/{MAX_EPOCHS} - "
+                f"[{model_name} | Trial {trial.number} | loss_fn={loss_fn_name}] Epoch {epoch:>2}/{MAX_EPOCHS} - "
                 f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
                 f"val_dice={val_dice:.4f} val_iou={val_iou:.4f}"
             )
@@ -242,13 +313,14 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
                 epochs_without_improvement += 1
                 if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
                     print(
-                        f"[{model_name} | Trial {trial.number}] Early stopping at epoch {epoch} "
-                        f"(no val_loss improvement for {EARLY_STOPPING_PATIENCE} epochs)."
+                        f"[{model_name} | Trial {trial.number} | loss_fn={loss_fn_name}] Early stopping "
+                        f"at epoch {epoch} (no val_loss improvement for {EARLY_STOPPING_PATIENCE} epochs)."
                     )
                     break
 
         trial.set_user_attr("best_val_iou", best_val_iou)
         trial.set_user_attr("model_name", model_name)
+        trial.set_user_attr("loss_fn", loss_fn_name)
         return best_val_dice
 
     return objective
@@ -287,13 +359,18 @@ def run_study(
 
 def _save_outputs(study: optuna.Study, model_name: str) -> None:
     """Persists everything needed to reconstruct this run's results after a
-    Kaggle session ends: every trial's params/value/user_attrs as a CSV, and
-    a compact JSON summary of the best trial (including where its checkpoint
-    was written by make_objective, so both files can be cross-referenced)."""
+    Kaggle session ends: every trial's params/value/user_attrs as a CSV
+    (including the "params_loss_fn" column from the loss_fn categorical
+    hyperparameter, so bce_dice vs. focal_tversky trials are directly
+    distinguishable), a compact JSON summary of the best trial overall, and
+    -- if this study tuned loss_fn -- a per-loss-function comparison table
+    (trial count, mean/max Dice per loss) both printed and saved, so the
+    two losses can be compared without hand-filtering the trials CSV."""
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
+    trials_df = study.trials_dataframe()
     trials_csv_path = LOGS_DIR / f"{model_name}_trials.csv"
-    study.trials_dataframe().to_csv(trials_csv_path, index=False)
+    trials_df.to_csv(trials_csv_path, index=False)
 
     summary = {
         "model_name": model_name,
@@ -305,6 +382,22 @@ def _save_outputs(study: optuna.Study, model_name: str) -> None:
         "checkpoint_path": str(CHECKPOINTS_DIR / f"best_{model_name}.pth"),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
+
+    if "params_loss_fn" in trials_df.columns:
+        comparison = (
+            trials_df.groupby("params_loss_fn")["value"]
+            .agg(n_trials="count", mean_dice="mean", best_dice="max")
+            .to_dict(orient="index")
+        )
+        summary["per_loss_fn_comparison"] = comparison
+        summary["per_loss_fn_checkpoints"] = {
+            loss_name: str(CHECKPOINTS_DIR / f"best_{model_name}_{loss_name}.pth")
+            for loss_name in LOSS_REGISTRY
+        }
+
+        print("\n--- Per-loss-function comparison ---")
+        print(trials_df.groupby("params_loss_fn")["value"].agg(["count", "mean", "max"]))
+
     summary_json_path = LOGS_DIR / f"{model_name}_study_summary.json"
     with open(summary_json_path, "w") as f:
         json.dump(summary, f, indent=2)

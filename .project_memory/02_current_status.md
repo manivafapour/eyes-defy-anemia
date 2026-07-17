@@ -2,49 +2,44 @@
 
 Last updated: 2026-07-17
 
-## CRITICAL: the aligned_raw dataset was rebuilt from scratch — v1 was wrong
-The original `scripts/build_aligned_dataset.py` (OpenCV `matchTemplate`, "217/217 aligned, confidence 0.952–0.998") **was proven wrong**. A manual visual review of `India_071` (not one of the 5 patients originally spot-checked) found the mask floating on the sclera instead of the lower eyelid, despite a 0.995 confidence score. Lesson: appearance-correlation confidence does not imply correct location, and 5 hand-picked spot-checks were not enough coverage to catch this. **The entire v1 approach and its `aligned_raw` output were discarded.**
+## Where things stand
+The aligned-photo segmentation dataset went through two major corrections this session and is now considered solid:
 
-Rebuilt (v2) using SIFT/ORB feature matching + `cv2.findHomography(..., cv2.RANSAC)` — geometrically constrained, not a single appearance score. Full writeup: `CLAUDE.md` §1.4.1 (v1, why it failed) and §1.4.2 (v2, current method). Result: 202/217 aligned, 15 *honest* failures (rejected by geometric sanity checks rather than silently wrong), all via SIFT, inliers 5–2014. `India_071` now visually confirmed correct, along with several other spot-checks.
+1. **v1 alignment (`cv2.matchTemplate`) was proven wrong.** A manual visual review of `India_071` found its mask floating on the sclera instead of the lower eyelid, despite a 0.995 confidence score — appearance correlation doesn't guarantee correct location. Discarded entirely.
+2. **v2 alignment (SIFT/ORB + `cv2.findHomography(..., RANSAC)`)** replaced it — geometrically constrained, not a single appearance score. Result: 202/217 aligned, 15 honest failures (rejected by geometric sanity checks, not silently wrong). Visually confirmed correct on `India_071` + several spot-checks. Full writeup: `CLAUDE.md` §1.4.1 (v1) / §1.4.2 (v2).
+3. **The 15 failures are permanently excluded**, not manually fixed. A `cv2.selectROI` manual-bbox tool was built and actually run on all 15, but the project author rejected the approach (crude/inconsistent vs. the other 202's RANSAC-derived masks) — tool and its output discarded. `AlignedConjunctivaSegmentationDataset` now filters to `status == "ok"` (202) without touching the shared `dataset_splits.csv` (`ConjunctivaSegmentationDataset`/`AnemiaClassificationDataset` still see all 217). Verified: `aligned_seg_*` returns 143/28/31 (202); `seg_*`/`cls_*` unaffected at 151/33/33 (217). Side effect: exclusion skews India-heavy (13 India, 2 Italy dropped). Full detail: `CLAUDE.md` §1.4.3.
 
-**Resolved:** the 15 failures are being permanently excluded, not manually fixed. A `cv2.selectROI` manual-bbox tool was built and actually run (all 15 patients got real hand-drawn boxes), but the project author decided against this approach (crude/inconsistent ground truth vs. the other 202) and the tool + its output were discarded. `AlignedConjunctivaSegmentationDataset` now filters to only `status == "ok"` patients (202) without touching the shared `dataset_splits.csv`. Verified: `aligned_seg_*` loaders return 143/28/31 (202), `seg_*`/`cls_*` unaffected at 151/33/33 (217). Side effect: the exclusion skews India-heavy (13 India, 2 Italy dropped), shifting the aligned subset's country balance further toward Italy than the original 70/15/15 stratification. Full detail: `CLAUDE.md` §1.4.3.
+**Training is authorized to proceed on this 202-patient aligned dataset.**
 
-**Training is now authorized to proceed on the 202-patient aligned dataset** — next step is addressing the sparsity/collapse issue (see below) before the next Kaggle run.
+## The collapse mystery — two fixes applied, root cause still not 100% certain
+An early Kaggle training attempt on the (since-discarded, v1) aligned dataset collapsed to all-background (`val_dice` pinned at `0.0000`, `val_loss` stuck ~0.60–0.61). Two things happened in response:
+- **Fix 1 — `BCEDiceLoss`** (`CLAUDE.md` §3.2a): replaced plain `BCEWithLogitsLoss`, whose per-pixel averaging under-penalizes a rare foreground. Verified: penalizes an all-background collapse 25× harder than plain BCE did, on synthetic data matching the real sparsity.
+- **Re-interpretation:** the collapsed run was against v1's *wrong* masks. A model trained on non-blank-but-spatially-wrong targets would plausibly collapse regardless of loss function (no learnable image→mask relationship). So it's genuinely unknown whether `BCEDiceLoss` alone would have fixed it, or whether the real problem was always the bad masks.
+- **Fix 2 (this session) — `FocalTverskyLoss` + side-by-side comparison** (`CLAUDE.md` §3.2b): rather than assume `BCEDiceLoss` is sufficient, `loss_fn` is now itself an Optuna-tuned categorical hyperparameter (`bce_dice` vs. `focal_tversky`), so the next Kaggle run will directly compare both on the clean, 202-patient v2 data. `FocalTverskyLoss` (α=0.3, β=0.7, γ=4/3) targets the same failure mode more aggressively — verified to penalize an all-background collapse even harder than `BCEDiceLoss` (0.9999 vs. 0.0013, vs. `BCEDiceLoss`'s 0.510 vs. 0.0057) and to punish a 50%-recall partial miss substantially more too (0.311 vs. 0.177).
+- Real, current sparsity stats on the 202-patient set: median 4.15% foreground, but bimodal — a small Italy-crop cluster sits at 75%. This is why a global BCE `pos_weight` was rejected in favor of Tversky-family losses (computed per-sample as a ratio, so they adapt automatically).
+
+**This has not been run on Kaggle yet.** Nothing is confirmed until real training data comes back.
 
 ## What's working right now
 - Full Phase 0 pipeline, reproducible from `archive.zip` (`scripts/phase0_prepare_dataset.py`).
-- `scripts/dataset.py`: three dataset classes (`ConjunctivaSegmentationDataset`, `AlignedConjunctivaSegmentationDataset`, `AnemiaClassificationDataset`), stratified split builder, train/eval transforms, `get_dataloaders()`. **Known gap:** `AlignedConjunctivaSegmentationDataset` will raise `FileNotFoundError` for the 15 patients missing from the v2 `aligned_raw` output, since `dataset_splits.csv` still lists all 217 — not yet handled, since no training against this dataset is authorized yet.
-- `scripts/build_aligned_dataset.py` (v2, SIFT/ORB + homography): 202/217 patients aligned, 15 honest failures, inlier counts 5–2014 (mean 311), 0/202 produced masks blank/near-blank. Verified quantitatively (scale-ratio consistency check) and visually (`India_071`, `India_001`, `India_029`, `Italy_097`, `Italy_001`).
-- Three segmentation architectures (`models/segmentation/{unet,attention_unet,resunet}.py`), all forward-pass verified on GPU.
-- `scripts/trainer_engine.py`: model- *and* dataset-agnostic Optuna training engine (TPE sampler, early stopping, Dice/IoU, checkpoint + log persistence to `outputs/`).
-- Six entry-point scripts total: 3 original (crop-based dataset) + 3 `_aligned` (raw-photo-aligned dataset). **Only the original 3 have actually been trained** (via Kaggle) — the `_aligned` scripts are written and import-verified but have never been run.
+- `scripts/dataset.py`: three dataset classes, stratified split builder, transforms, `get_dataloaders()`. `AlignedConjunctivaSegmentationDataset` correctly filters to the 202 aligned patients (no more `FileNotFoundError` gap).
+- `scripts/build_aligned_dataset.py` (v2, SIFT/ORB + homography): 202/217 aligned, 15 honest failures, inliers 5–2014 (mean 311).
+- Three segmentation architectures (`models/segmentation/{unet,attention_unet,resunet}.py`), forward-pass verified on GPU.
+- `scripts/trainer_engine.py`: model-, dataset-, *and now loss-function*-agnostic Optuna engine. `loss_fn` sampled per-trial from `LOSS_REGISTRY` (`bce_dice`, `focal_tversky`); each gets its own checkpoint (`best_{model_name}_{loss_fn}.pth`) plus a per-loss comparison table in the study summary JSON. Verified via a synthetic 6-trial run with mocked results.
+- Six entry-point scripts (3 original crop-based + 3 `_aligned`) — no changes needed for the loss comparison, since loss selection lives entirely inside the shared engine now.
 
 ## Training results that exist right now
-**Original crop-based dataset, all 3 models trained on Kaggle T4×2:**
-- Real per-trial logs exist: `outputs/logs/{unet,attention_unet,resunet}_trials.csv` + `_study_summary.json`.
-- Standard U-Net specifically: the project author reported a Kaggle result (Trial 4, Val Dice 0.9900, Val IoU 0.9800) that is **not independently verified** in this session — no notebook/log artifact was available to check it against. A separate local partial run (interrupted mid-Trial-4 by session teardown) produced different, directly-observed numbers (Trial 0 best, Dice 0.9893). Both figures are recorded in `CLAUDE.md` §3.5/§3.6, explicitly labeled by provenance — don't quote the 0.99/0.98 figures as confirmed without going back to check for the actual Kaggle notebook output.
+**Original crop-based dataset, all 3 models trained on Kaggle T4×2 (before the loss-fn-as-hyperparameter change, under plain `BCEDiceLoss`):**
+- Real per-trial logs: `outputs/logs/{unet,attention_unet,resunet}_trials.csv` + `_study_summary.json`.
+- Standard U-Net: a Kaggle result (Trial 4, Val Dice 0.9900, Val IoU 0.9800) was reported but **not independently verified** — no notebook/log artifact available. A local partial run showed different numbers (Trial 0 best, Dice 0.9893). Both recorded in `CLAUDE.md` §3.5/§3.6 with explicit provenance labels — don't cite the 0.99/0.98 figures as confirmed.
 
-**Aligned dataset:** an initial Kaggle training attempt on the aligned dataset **collapsed** — model predicted all-background (`val_dice` pinned at `0.0000`) while `val_loss` kept decreasing. Root cause + fix below; not yet re-run with the fix.
-
-## Known issues driving the current direction
-1. **Domain shift (led to the aligned-dataset pivot):** the original `ConjunctivaSegmentationDataset` pairs an image that's already ~90%+ black outside the true mask (its "image" is the palpebral crop's own RGB, zeroed wherever its own alpha channel is 0 — `CLAUDE.md` §1.2). A model trained on this does not generalize to raw photos: empirically verified in the abandoned Phase 3 attempt 1 — 214/217 outputs came out near-full-frame, and visual inspection confirmed the model wasn't isolating tissue, just predicting "foreground = non-black pixel." This is why we pivoted to building `aligned_raw` (a real mask in the raw photo's own coordinate frame, via template matching) instead of patching the old approach.
-2. **Class-imbalance collapse (found when first training on the aligned dataset):** per-patient foreground in `aligned_raw` masks can be well under 1% of the 256×256 canvas. Plain `BCEWithLogitsLoss` let the model minimize loss by predicting all-background. **Fixed** in `scripts/trainer_engine.py`: `criterion` is now `BCEDiceLoss` (BCE + soft Dice, 50/50). Verified quantitatively on a synthetic mask matching the real sparsity: plain BCE penalized an all-background collapse by only 0.0198 over a correct prediction; `BCEDiceLoss` penalizes the same collapse by 0.504 — ~25× stronger gradient signal. Full writeup: `CLAUDE.md` §3.2a. **This change affects all six entry-point scripts** (shared engine), so re-running the original (non-aligned) scripts today would no longer exactly reproduce the already-logged Kaggle results in `outputs/logs/{unet,attention_unet,resunet}_*`, which were trained under plain BCE.
+**Aligned dataset (v2, 202 patients, with the loss comparison):** no training has been run yet.
 
 ## Immediate next step
-1. **User visually reviews `notebooks/verify_alignment_sanity_check.ipynb` (v2)** — all 10 sampled patients (including `India_071`) plus the full-dataset failure list. Nothing below happens until this is confirmed.
-2. Decide how to handle the 15 patients whose alignment failed (drop from the split? attempt a different method for just those?) and fix `AlignedConjunctivaSegmentationDataset`'s missing-file gap accordingly.
-3. Re-upload the new `aligned_raw/` to Kaggle (the old upload is now stale/wrong), update the Kaggle-side copy/setup script, `git pull` the latest code.
-4. Run the 3 `_aligned` entry-point scripts on Kaggle (this will be a fresh run against genuinely-correct data, with the `BCEDiceLoss` fix already in place).
-5. Pull `outputs/checkpoints/best_*_aligned.pth` + `outputs/logs/*_aligned_*` back into this repo.
-6. **Re-run a domain-shift check** — does the aligned-trained model actually isolate tissue on a raw photo now? Don't skip this; it's the entire point of the pivot.
-7. Only after that: rebuild Phase 3 (real inference + cropping) against whichever model is confirmed to generalize.
-8. Phase 4 (classification) hasn't been started at all yet.
-
-## Update: training still collapsed after the BCEDiceLoss fix
-Kaggle report: `val_dice` still pinned at `0.0000`, `val_loss` stuck ~0.60–0.61, even with `BCEDiceLoss` in place. Before touching the loss/hyperparameters further, built `notebooks/verify_alignment_sanity_check.ipynb` to check whether `aligned_raw` masks are actually blank.
-
-**Result (executed against the local repo's data):** masks are **not** blank. Full scan of all 217 `aligned_raw` masks: 0 fully blank, 0 near-blank (<10 positive px), min positive pixels = 186, mean = 1094. Visual check on a fresh random patient (`Italy_069`, not previously hand-picked) shows the mask precisely on the correct tissue location, matching the original crop's shape.
-
-**Conclusion at the time:** the data in *this local repo* is confirmed good — this specific collapse is not explained by blank/corrupted masks here. Two hypotheses were left open: (a) a Kaggle-side data mismatch, (b) the loss fix not being strong enough for the sparsity level.
-
-**Superseded — likely real explanation found:** the "blank mask" check only checked for blank-ness, not spatial *correctness*. We now know (see the top of this file) that the v1 alignment approach producing that data was systematically capable of placing a fully non-blank, confident-looking mask at the *wrong anatomical location* (confirmed on `India_071`). Training a segmentation model against masks that are present but not consistently aligned with real tissue would plausibly cause exactly this collapse pattern (no learnable image→mask relationship, `val_loss` stuck at a middling value) independent of whether `BCEDiceLoss` was strong enough. **The class-imbalance loss fix (`BCEDiceLoss`) may well have been fine all along** — it was very possibly being asked to learn from corrupted training targets. This won't be known for certain until the v2-aligned data is used for a fresh training run.
+1. Get `aligned_raw/` (v2, 202 patients) onto Kaggle — the previous upload is stale (v1 data). Update the Kaggle-side copy/setup script, `git pull` the latest code.
+2. Run the 3 `_aligned` entry-point scripts on Kaggle. Consider raising `n_trials` above the default 5 (e.g. 10-12) — with `loss_fn` now a 3rd tuned dimension, more trials are needed to get meaningful coverage of both losses.
+3. Pull `outputs/checkpoints/best_*_aligned*.pth` + `outputs/logs/*_aligned_*` back into this repo.
+4. Compare `bce_dice` vs. `focal_tversky` via the per-loss comparison table in the study summary JSON.
+5. **Re-run a domain-shift check** — does the winning model actually isolate tissue on a raw photo? This is still the entire point of the original pivot; don't skip it.
+6. Only after that: rebuild Phase 3 (real inference + cropping) against whichever model generalizes.
+7. Phase 4 (classification) hasn't been started at all yet.
