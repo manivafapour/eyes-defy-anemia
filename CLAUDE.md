@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. It also serves as the primary methodology reference for the project's written thesis — entries below are written for scientific accuracy and should be treated as authoritative over any prior/looser description of the same step.
 
+**Session-start instruction:** before doing anything else in a new session, silently read `.project_memory/01_roadmap.md`, `.project_memory/02_current_status.md`, and `.project_memory/03_tech_stack_and_rules.md` to load current project context. After completing a major task or making an architectural decision, update the relevant file(s) in `.project_memory/` before moving on. `.project_memory/` is the lightweight, frequently-updated working-memory system; this file (`CLAUDE.md`) remains the authoritative, thesis-grade methodology record — the two should stay consistent, but `CLAUDE.md` is the one held to scientific-accuracy standards.
+
 ## Project Overview
 
 EYES-DEFY-ANEMIA is an eye-image-based anemia detection project using photographs of the palpebral conjunctiva (inner eyelid lining). The pipeline has two downstream modeling tasks sharing one data foundation: (1) segmentation of the palpebral conjunctiva region, and (2) binary anemia classification from the raw eye photo. Source data: 218 patient folders (India + Italy) inside `archive.zip`, each with a hemoglobin (Hgb) reading, gender, age, a raw eye photo, and a palpebral conjunctiva crop.
