@@ -1,12 +1,13 @@
 """
 Shared Optuna training engine for the palpebral conjunctiva segmentation
-models. Model-agnostic by design: it takes a model class and a name and
-runs the full 5-trial hyperparameter search against them. The per-model
-entry-point scripts (train_standard_unet.py, train_attention_unet.py,
-train_resunet.py) each just import run_study() and pass in their own model
--- no shared file needs editing to pick which architecture trains, which
-matters when execution happens on a remote notebook (Kaggle) rather than
-this local environment.
+models. Model-agnostic AND dataset-agnostic by design: it takes a model
+class/name and a dataset class, and runs the full 5-trial hyperparameter
+search against them. The per-model entry-point scripts (train_standard_
+unet.py, train_attention_unet.py, train_resunet.py, and their _aligned.py
+counterparts) each just import run_study() and pass in their own model +
+dataset -- no shared file needs editing to pick which architecture or
+dataset trains, which matters when execution happens on a remote notebook
+(Kaggle) rather than this local environment.
 
 Persists everything a Kaggle background run would otherwise lose when the
 session ends: the best model's weights (outputs/checkpoints/) and the full
@@ -118,10 +119,15 @@ def evaluate(model, loader, criterion, device, threshold: float = 0.5):
 # --------------------------------------------------------------------------
 # Optuna objective factory
 # --------------------------------------------------------------------------
-def make_objective(model_cls, model_name: str):
+def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentationDataset):
     """Builds an Optuna objective(trial) closure bound to a specific model
-    class/name, so the same engine can drive any segmentation architecture
-    that follows the (in_channels=3, out_channels=1) -> raw-logits contract.
+    class/name and dataset class, so the same engine can drive any
+    segmentation architecture (in_channels=3, out_channels=1 -> raw-logits
+    contract) against any dataset that returns (image, mask) pairs on that
+    same contract -- e.g. ConjunctivaSegmentationDataset (crop-based) or
+    AlignedConjunctivaSegmentationDataset (raw-photo-aligned, CLAUDE.md
+    Sec 1.4). dataset_cls defaults to the original crop-based dataset so
+    existing callers that don't pass it are unaffected.
 
     The closure also owns a `best_overall_dice` value that persists across
     every trial of the study (not just within one trial), so the checkpoint
@@ -136,10 +142,10 @@ def make_objective(model_cls, model_name: str):
         learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
         weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
 
-        train_dataset = ConjunctivaSegmentationDataset(
+        train_dataset = dataset_cls(
             split="train", splits_csv=SPLITS_CSV, transform=get_train_transforms()
         )
-        val_dataset = ConjunctivaSegmentationDataset(
+        val_dataset = dataset_cls(
             split="val", splits_csv=SPLITS_CSV, transform=get_eval_transforms()
         )
 
@@ -205,13 +211,19 @@ def make_objective(model_cls, model_name: str):
 # --------------------------------------------------------------------------
 # Study runner -- the single shared entry point every model-specific script calls
 # --------------------------------------------------------------------------
-def run_study(model_cls, model_name: str, n_trials: int = N_TRIALS) -> optuna.Study:
+def run_study(
+    model_cls,
+    model_name: str,
+    dataset_cls=ConjunctivaSegmentationDataset,
+    n_trials: int = N_TRIALS,
+) -> optuna.Study:
     print(f"Using device: {DEVICE}")
     print(f"Model: {model_name} ({model_cls.__name__})")
+    print(f"Dataset: {dataset_cls.__name__}")
 
     sampler = optuna.samplers.TPESampler(seed=SEED)
     study = optuna.create_study(direction="maximize", sampler=sampler)
-    study.optimize(make_objective(model_cls, model_name), n_trials=n_trials)
+    study.optimize(make_objective(model_cls, model_name, dataset_cls), n_trials=n_trials)
 
     print("\n--- Optuna study complete ---")
     print(f"Model: {model_name}")

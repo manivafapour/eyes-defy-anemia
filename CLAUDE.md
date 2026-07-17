@@ -117,7 +117,7 @@ Validation/test transforms are deterministic only (`Resize` → `Normalize` → 
 
 **New dataset class:** `AlignedConjunctivaSegmentationDataset` (`scripts/dataset.py`) reads `(image, mask)` from `data/processed/aligned_raw/{images,masks}/` — image is the *full raw photo*, mask is a genuinely pixel-aligned tissue mask in that same frame. It is additive, not a replacement: `ConjunctivaSegmentationDataset` (§1.2) is unchanged and still valid for its original purpose (and for comparison); `AlignedConjunctivaSegmentationDataset` is the dataset to use going forward for a segmentation model intended to generalize to raw photos. Both are wired into `get_dataloaders()` (`seg_*` vs. `aligned_seg_*` keys) using the same `get_train_transforms()`/`get_eval_transforms()` pipeline (§1.3) — no new transform logic was needed, since both datasets share the same 256×256 RGB image / single-channel binary mask contract.
 
-**Not yet done:** `scripts/trainer_engine.py` and the three per-model entry-point scripts (§2.6) still train against the original `ConjunctivaSegmentationDataset`. Retargeting them at `AlignedConjunctivaSegmentationDataset` is a separate, deliberate follow-up step, not yet performed.
+**Update:** `scripts/trainer_engine.py` now accepts a `dataset_cls` parameter (§2.6, §3.2), and three new sibling entry-point scripts (`train_standard_unet_aligned.py`, `train_attention_unet_aligned.py`, `train_resunet_aligned.py`) target `AlignedConjunctivaSegmentationDataset`. The original three entry-point scripts are untouched and still train against `ConjunctivaSegmentationDataset` by default. **None of the three `_aligned` entry-point scripts have been run yet** — this is infrastructure only; no aligned-dataset training results exist as of this entry. Getting `data/processed/aligned_raw/{images,masks}/` onto Kaggle (they're `.gitignore`'d, so `git pull` alone won't bring them over) and updating the Kaggle-side copy/setup script are separate, not-yet-done steps.
 
 ---
 
@@ -164,7 +164,12 @@ Same overall topology and I/O contract as Model 1, but every `DoubleConv` block 
 Verified via the same forward-pass smoke test: output shape `[1, 1, 256, 256]`, `float32`, `cuda:0`. Parameter count: **32,436,353**.
 
 ### 2.6 Model switching
-All three models share an identical constructor signature (`Model(in_channels=3, out_channels=1)`) and forward contract (raw logits, `[B, 1, H, W]`). Training logic is not model-specific: the shared engine (`scripts/trainer_engine.py`, §3) takes a model class and name as arguments, and three thin per-model entry-point scripts (`scripts/train_standard_unet.py`, `scripts/train_attention_unet.py`, `scripts/train_resunet.py`) each just import the engine and call `run_study(model_cls=..., model_name=...)` with their own architecture. This replaced an earlier single-script `MODEL_REGISTRY`/`MODEL_NAME`-constant design — separate entry points were needed because execution happens on Kaggle, where editing a shared constant before each run isn't part of the workflow; a dedicated script per model can be run as-is.
+All three models share an identical constructor signature (`Model(in_channels=3, out_channels=1)`) and forward contract (raw logits, `[B, 1, H, W]`). Training logic is not model- or dataset-specific: the shared engine (`scripts/trainer_engine.py`, §3) takes a model class/name *and* a dataset class as arguments (`dataset_cls`, defaulting to `ConjunctivaSegmentationDataset` for backward compatibility), and six thin entry-point scripts each just import the engine and call `run_study(model_cls=..., model_name=..., dataset_cls=...)` with their own architecture + dataset:
+
+- `scripts/train_standard_unet.py`, `scripts/train_attention_unet.py`, `scripts/train_resunet.py` — original, crop-based `ConjunctivaSegmentationDataset` (§1.2), `model_name` = `unet`/`attention_unet`/`resunet`.
+- `scripts/train_standard_unet_aligned.py`, `scripts/train_attention_unet_aligned.py`, `scripts/train_resunet_aligned.py` — raw-photo-aligned `AlignedConjunctivaSegmentationDataset` (§1.4), `model_name` = `unet_aligned`/`attention_unet_aligned`/`resunet_aligned`.
+
+The `_aligned` suffix on `model_name` is deliberate, not cosmetic: every output path (`outputs/checkpoints/best_{model_name}.pth`, `outputs/logs/{model_name}_*`) is derived from `model_name`, so without a distinct name an aligned run would silently overwrite the existing crop-based checkpoints/logs. This replaced an earlier single-script `MODEL_REGISTRY`/`MODEL_NAME`-constant design — separate entry points were needed because execution happens on Kaggle, where editing a shared constant before each run isn't part of the workflow; a dedicated script per (model, dataset) pair can be run as-is.
 
 ---
 
@@ -180,7 +185,7 @@ Two hyperparameters are tuned per trial, both log-uniform (appropriate for scale
 - `weight_decay ~ LogUniform(1e-6, 1e-3)`
 
 ### 3.2 Per-trial training loop
-Each trial constructs a fresh model (the class/name passed into `run_study()` by whichever entry-point script called it, §2.6), `AdamW` optimizer (using the trial's sampled `learning_rate`/`weight_decay`), and `BCEWithLogitsLoss` — no state is shared across trials. Training runs for up to **30 epochs**, with **early stopping** (patience = 5 epochs, evaluated on validation loss with no improvement threshold/min-delta) to abandon poorly-performing trials early rather than exhausting the full epoch budget.
+Each trial constructs a fresh model and dataset (the classes/name passed into `run_study()` by whichever entry-point script called it, §2.6), `AdamW` optimizer (using the trial's sampled `learning_rate`/`weight_decay`), and `BCEWithLogitsLoss` — no state is shared across trials. Training runs for up to **30 epochs**, with **early stopping** (patience = 5 epochs, evaluated on validation loss with no improvement threshold/min-delta) to abandon poorly-performing trials early rather than exhausting the full epoch budget.
 
 ### 3.3 Validation metrics: sigmoid-threshold, then Dice/IoU
 Because the model outputs raw logits (§2.2), validation applies `torch.sigmoid(logits)` followed by thresholding at `0.5` to obtain a binary predicted mask, *before* computing spatial overlap metrics (the loss itself, `BCEWithLogitsLoss`, still consumes the raw logits directly — only the metrics operate on the thresholded binary mask). For each validation batch:
