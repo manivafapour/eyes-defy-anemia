@@ -77,7 +77,7 @@ networkx==3.6.1
 notebook==7.6.0
 notebook_shim==0.2.4
 numpy==2.5.1
-opencv-python-headless==5.0.0.93
+opencv-python==5.0.0.93
 openpyxl==3.1.5
 optuna==4.9.0
 packaging==26.2

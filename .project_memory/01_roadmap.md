@@ -13,7 +13,7 @@ High-level, sequential plan for the whole project. `[x]` = done and verified (no
 - [x] `ConjunctivaSegmentationDataset` (crop-based) + `AnemiaClassificationDataset`
 - [x] Synchronized `albumentations` augmentation pipeline (train vs. eval transforms)
 - [x] **Data-centric fix (v1, template matching — proven wrong, discarded):** see `CLAUDE.md` §1.4.1
-- [ ] **Data-centric fix (v2, SIFT/ORB + RANSAC homography):** rebuilt, 202/217 aligned, `AlignedConjunctivaSegmentationDataset` wired up — **pending the project author's own visual confirmation** (`notebooks/verify_alignment_sanity_check.ipynb`) before use
+- [x] **Data-centric fix (v2, SIFT/ORB + RANSAC homography):** 202/217 aligned, visually confirmed (`India_071` + spot-checks). The remaining 15 are permanently excluded (not manually annotated — tried and rejected, `CLAUDE.md` §1.4.3); `AlignedConjunctivaSegmentationDataset` filters to only these 202 without touching the shared `dataset_splits.csv`.
 
 ## Environment / Hardware
 - [x] Local CUDA-enabled PyTorch environment (RTX 4050)

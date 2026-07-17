@@ -45,6 +45,7 @@ MASKS_DIR = PROCESSED_DIR / "masks"
 ALIGNED_ROOT = PROCESSED_DIR / "aligned_raw"
 ALIGNED_IMAGES_DIR = ALIGNED_ROOT / "images"
 ALIGNED_MASKS_DIR = ALIGNED_ROOT / "masks"
+ALIGNMENT_LOG_CSV = ALIGNED_ROOT / "alignment_log.csv"
 
 IMAGE_SIZE = 256
 BATCH_SIZE = 16
@@ -164,13 +165,23 @@ class ConjunctivaSegmentationDataset(Dataset):
 
 class AlignedConjunctivaSegmentationDataset(Dataset):
     """Returns (image, mask) from the raw-photo-aligned dataset
-    (data/processed/aligned_raw/, built by scripts/build_aligned_dataset.py).
-    Unlike ConjunctivaSegmentationDataset, image is the FULL raw clinical
-    photo (data/processed/aligned_raw/images/{patient_id}.jpg) and mask is a
+    (data/processed/aligned_raw/, built by scripts/build_aligned_dataset.py
+    via SIFT/ORB + RANSAC homography -- CLAUDE.md Sec 1.4.2). Unlike
+    ConjunctivaSegmentationDataset, image is the FULL raw clinical photo
+    (data/processed/aligned_raw/images/{patient_id}.jpg) and mask is a
     genuinely pixel-aligned tissue mask in that same coordinate frame
-    (data/processed/aligned_raw/masks/{patient_id}.png), recovered via
-    template matching rather than sharing a single source file. Binarized
-    to {0.0, 1.0} and shaped [1, H, W], same as ConjunctivaSegmentationDataset."""
+    (data/processed/aligned_raw/masks/{patient_id}.png). Binarized to
+    {0.0, 1.0} and shaped [1, H, W], same as ConjunctivaSegmentationDataset.
+
+    Only 202 of 217 patients have a successful alignment (15 were rejected
+    by build_aligned_dataset.py's geometric sanity checks and, per a
+    deliberate decision, are excluded rather than manually annotated --
+    see CLAUDE.md Sec 1.4.3). This class filters to those 202 by joining
+    against alignment_log.csv, WITHOUT modifying dataset_splits.csv itself
+    -- that CSV is shared with ConjunctivaSegmentationDataset and
+    AnemiaClassificationDataset, for which all 217 patients (including
+    the 15) remain perfectly valid; only this class's input data is
+    incomplete for them."""
 
     def __init__(
         self,
@@ -178,10 +189,17 @@ class AlignedConjunctivaSegmentationDataset(Dataset):
         splits_csv: Path = SPLITS_CSV,
         images_dir: Path = ALIGNED_IMAGES_DIR,
         masks_dir: Path = ALIGNED_MASKS_DIR,
+        alignment_log_csv: Path = ALIGNMENT_LOG_CSV,
         transform=None,
     ):
         df = pd.read_csv(splits_csv)
-        self.df = df[df["split"] == split].reset_index(drop=True)
+        df = df[df["split"] == split]
+
+        alignment_log = pd.read_csv(alignment_log_csv)
+        aligned_ids = set(alignment_log.loc[alignment_log["status"] == "ok", "patient_id"])
+        df = df[df["patient_id"].isin(aligned_ids)]
+
+        self.df = df.reset_index(drop=True)
         self.images_dir = Path(images_dir)
         self.masks_dir = Path(masks_dir)
         self.transform = transform

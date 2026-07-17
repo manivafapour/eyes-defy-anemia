@@ -7,7 +7,9 @@ The original `scripts/build_aligned_dataset.py` (OpenCV `matchTemplate`, "217/21
 
 Rebuilt (v2) using SIFT/ORB feature matching + `cv2.findHomography(..., cv2.RANSAC)` — geometrically constrained, not a single appearance score. Full writeup: `CLAUDE.md` §1.4.1 (v1, why it failed) and §1.4.2 (v2, current method). Result: 202/217 aligned, 15 *honest* failures (rejected by geometric sanity checks rather than silently wrong), all via SIFT, inliers 5–2014. `India_071` now visually confirmed correct, along with several other spot-checks.
 
-**Status: pending the project author's own visual review of `notebooks/verify_alignment_sanity_check.ipynb` (v2) before any training proceeds.** Do not resume training on `aligned_raw` until that happens.
+**Resolved:** the 15 failures are being permanently excluded, not manually fixed. A `cv2.selectROI` manual-bbox tool was built and actually run (all 15 patients got real hand-drawn boxes), but the project author decided against this approach (crude/inconsistent ground truth vs. the other 202) and the tool + its output were discarded. `AlignedConjunctivaSegmentationDataset` now filters to only `status == "ok"` patients (202) without touching the shared `dataset_splits.csv`. Verified: `aligned_seg_*` loaders return 143/28/31 (202), `seg_*`/`cls_*` unaffected at 151/33/33 (217). Side effect: the exclusion skews India-heavy (13 India, 2 Italy dropped), shifting the aligned subset's country balance further toward Italy than the original 70/15/15 stratification. Full detail: `CLAUDE.md` §1.4.3.
+
+**Training is now authorized to proceed on the 202-patient aligned dataset** — next step is addressing the sparsity/collapse issue (see below) before the next Kaggle run.
 
 ## What's working right now
 - Full Phase 0 pipeline, reproducible from `archive.zip` (`scripts/phase0_prepare_dataset.py`).
