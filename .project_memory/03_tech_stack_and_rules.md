@@ -3,7 +3,7 @@
 ## Core stack
 - Python 3.14.6 (local `venv/`); PyTorch 2.13.0+cu130, torchvision 0.28.0+cu130, torchaudio 2.11.0+cu130 (GPU: local RTX 4050; Kaggle: T4×2).
 - `albumentations` 2.0.8 — synchronized image+mask augmentation (nearest-neighbor interpolation for masks, so they stay binary).
-- `opencv-python-headless` 5.0.0 (`cv2`) — connected components, masked template matching.
+- `opencv-python` 5.0.0 (`cv2`, GUI-enabled — swapped from `opencv-python-headless` for `cv2.selectROI` support) — SIFT/ORB feature matching, RANSAC homography, connected components.
 - `optuna` 4.9.0 — TPE-sampler hyperparameter search.
 - `pandas`, `numpy`, `Pillow`, `scikit-learn` (stratified splitting), `openpyxl`.
 
