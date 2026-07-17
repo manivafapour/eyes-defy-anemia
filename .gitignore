@@ -6,6 +6,17 @@ dataset anemia/
 data/processed/images/
 data/processed/masks/
 
+# Raw-photo-aligned image/mask outputs (large binaries, regenerable via
+# scripts/build_aligned_dataset.py; alignment_log.csv is NOT ignored --
+# it's small and worth keeping in version control)
+data/processed/aligned_raw/images/
+data/processed/aligned_raw/masks/
+
+# Orphaned local output from the abandoned Phase 3 crop-based approach
+# (its generating scripts were deleted; this directory is stale disk
+# clutter, kept ignored purely so it can't be accidentally committed)
+data/cropped/
+
 # Python virtual environment
 venv/
 

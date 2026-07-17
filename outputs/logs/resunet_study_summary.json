@@ -1,0 +1,13 @@
+{
+  "model_name": "resunet",
+  "n_trials_run": 5,
+  "best_trial_number": 4,
+  "best_val_dice": 0.9889131278702707,
+  "best_val_iou": 0.978258383996559,
+  "best_params": {
+    "learning_rate": 0.0006358358856676254,
+    "weight_decay": 0.000133112160807369
+  },
+  "checkpoint_path": "/kaggle/working/eyes-defy-anemia/outputs/checkpoints/best_resunet.pth",
+  "timestamp_utc": "2026-07-16T14:29:03.405294+00:00"
+}

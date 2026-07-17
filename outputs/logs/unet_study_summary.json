@@ -1,0 +1,13 @@
+{
+  "model_name": "unet",
+  "n_trials_run": 5,
+  "best_trial_number": 4,
+  "best_val_dice": 0.9908821420236067,
+  "best_val_iou": 0.9820673321232651,
+  "best_params": {
+    "learning_rate": 0.0006358358856676254,
+    "weight_decay": 0.000133112160807369
+  },
+  "checkpoint_path": "/kaggle/working/eyes-defy-anemia/outputs/checkpoints/best_unet.pth",
+  "timestamp_utc": "2026-07-16T14:49:54.847439+00:00"
+}

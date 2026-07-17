@@ -2,15 +2,20 @@
 Phase 1: Dual Data Pipeline Construction for the Eyes-Defy-Anemia project.
 
 Builds a patient-level, country+label-stratified train/val/test split on top
-of the Phase 0 metadata, then exposes two PyTorch datasets over the same
-processed images:
+of the Phase 0 metadata, then exposes three PyTorch datasets:
 
 - ConjunctivaSegmentationDataset: (image, mask) pairs from
   data/processed/masks/{patient_id}_palpebral.png. The RGB channels are the
   image and the alpha channel (binarized) is the mask -- they are the only
-  pixel-aligned pair available, since the raw eye photo (data/processed/images)
-  and the palpebral crop went through independent crop/pad/resize steps in
-  Phase 0 and do not share a coordinate grid.
+  pixel-aligned pair available from Phase 0 alone, since the raw eye photo
+  (data/processed/images) and the palpebral crop went through independent
+  crop/pad/resize steps in Phase 0 and do not share a coordinate grid.
+- AlignedConjunctivaSegmentationDataset: (image, mask) pairs from
+  data/processed/aligned_raw/{images,masks}/, built by
+  scripts/build_aligned_dataset.py via template-matching-based alignment.
+  image is the FULL raw photo; mask is a genuinely pixel-aligned tissue mask
+  in that same coordinate frame -- the dataset to use for a segmentation
+  model intended to generalize to raw photos (see CLAUDE.md Sec 1.4).
 - AnemiaClassificationDataset: (image, label) pairs from
   data/processed/images/{patient_id}.jpg and the metadata's anemic_label.
 """
@@ -36,6 +41,10 @@ METADATA_CSV = PROCESSED_DIR / "metadata.csv"
 SPLITS_CSV = PROCESSED_DIR / "dataset_splits.csv"
 IMAGES_DIR = PROCESSED_DIR / "images"
 MASKS_DIR = PROCESSED_DIR / "masks"
+
+ALIGNED_ROOT = PROCESSED_DIR / "aligned_raw"
+ALIGNED_IMAGES_DIR = ALIGNED_ROOT / "images"
+ALIGNED_MASKS_DIR = ALIGNED_ROOT / "masks"
 
 IMAGE_SIZE = 256
 BATCH_SIZE = 16
@@ -153,6 +162,51 @@ class ConjunctivaSegmentationDataset(Dataset):
         return image, mask
 
 
+class AlignedConjunctivaSegmentationDataset(Dataset):
+    """Returns (image, mask) from the raw-photo-aligned dataset
+    (data/processed/aligned_raw/, built by scripts/build_aligned_dataset.py).
+    Unlike ConjunctivaSegmentationDataset, image is the FULL raw clinical
+    photo (data/processed/aligned_raw/images/{patient_id}.jpg) and mask is a
+    genuinely pixel-aligned tissue mask in that same coordinate frame
+    (data/processed/aligned_raw/masks/{patient_id}.png), recovered via
+    template matching rather than sharing a single source file. Binarized
+    to {0.0, 1.0} and shaped [1, H, W], same as ConjunctivaSegmentationDataset."""
+
+    def __init__(
+        self,
+        split: str,
+        splits_csv: Path = SPLITS_CSV,
+        images_dir: Path = ALIGNED_IMAGES_DIR,
+        masks_dir: Path = ALIGNED_MASKS_DIR,
+        transform=None,
+    ):
+        df = pd.read_csv(splits_csv)
+        self.df = df[df["split"] == split].reset_index(drop=True)
+        self.images_dir = Path(images_dir)
+        self.masks_dir = Path(masks_dir)
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return len(self.df)
+
+    def __getitem__(self, idx: int):
+        patient_id = self.df.loc[idx, "patient_id"]
+        image = np.array(Image.open(self.images_dir / f"{patient_id}.jpg").convert("RGB"))
+        mask = np.array(Image.open(self.masks_dir / f"{patient_id}.png").convert("L"))
+        mask = (mask > 127).astype(np.float32)
+
+        if self.transform is not None:
+            augmented = self.transform(image=image, mask=mask)
+            image, mask = augmented["image"], augmented["mask"]
+        else:
+            image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
+            mask = torch.from_numpy(mask).float()
+
+        if mask.dim() == 2:
+            mask = mask.unsqueeze(0)
+        return image, mask
+
+
 class AnemiaClassificationDataset(Dataset):
     """Returns (image, label). image is the full raw eye photo; label is
     the WHO-threshold anemic_label (0.0/1.0) from the metadata."""
@@ -190,6 +244,9 @@ def get_dataloaders(batch_size: int = BATCH_SIZE, num_workers: int = 0) -> dict:
         "seg_train": ConjunctivaSegmentationDataset(split="train", transform=train_tf),
         "seg_val": ConjunctivaSegmentationDataset(split="val", transform=eval_tf),
         "seg_test": ConjunctivaSegmentationDataset(split="test", transform=eval_tf),
+        "aligned_seg_train": AlignedConjunctivaSegmentationDataset(split="train", transform=train_tf),
+        "aligned_seg_val": AlignedConjunctivaSegmentationDataset(split="val", transform=eval_tf),
+        "aligned_seg_test": AlignedConjunctivaSegmentationDataset(split="test", transform=eval_tf),
         "cls_train": AnemiaClassificationDataset(split="train", transform=train_tf),
         "cls_val": AnemiaClassificationDataset(split="val", transform=eval_tf),
         "cls_test": AnemiaClassificationDataset(split="test", transform=eval_tf),
@@ -218,6 +275,12 @@ if __name__ == "__main__":
     print("image shape [B, C, H, W]:", tuple(seg_images.shape))
     print("mask shape  [B, C, H, W]:", tuple(seg_masks.shape))
     print("mask min/max:", seg_masks.min().item(), seg_masks.max().item())
+
+    aligned_images, aligned_masks = next(iter(loaders["aligned_seg_train"]))
+    print("\n--- Aligned segmentation batch ---")
+    print("image shape [B, C, H, W]:", tuple(aligned_images.shape))
+    print("mask shape  [B, C, H, W]:", tuple(aligned_masks.shape))
+    print("mask min/max:", aligned_masks.min().item(), aligned_masks.max().item())
 
     cls_images, cls_labels = next(iter(loaders["cls_train"]))
     print("\n--- Classification batch ---")

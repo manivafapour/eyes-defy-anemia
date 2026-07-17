@@ -99,6 +99,26 @@ The two targets use different interpolation during rotation, by design:
 
 Validation/test transforms are deterministic only (`Resize` → `Normalize` → `ToTensorV2`) — no random flip or rotation, so evaluation metrics are computed on a fixed, non-stochastic view of each sample.
 
+### 1.4 Data-centric fix: raw-photo-aligned segmentation dataset (`scripts/build_aligned_dataset.py`)
+**Motivation:** empirical testing of a model trained on §1.2's dataset (image = palpebral crop's own RGB, mask = that file's own alpha) showed it does not generalize to raw eye photos — predictions came out as near-full-frame regardless of input, consistent with the model having learned "foreground = non-black pixel" as a shortcut, since that cue is reliably predictive on §1.2's mostly-black training input but does not exist in a normal, fully-lit raw photo. Training a model that generalizes to raw photos requires a real mask *in the raw photo's own coordinate frame* — which Phase 0 never produced, since the raw photo and the crop were padded/resized independently and don't share a pixel grid (§0.3).
+
+**Method — recovering the alignment via template matching:**
+1. For each of the 217 patients, the *original* (un-padded, native-resolution) raw photo and palpebral crop are read directly from `archive.zip`, reusing Phase 0's own file-finding (`find_source_files`) and PNG-repair (`sanitize_png_bytes`) logic for consistency. This has to run on the native-resolution originals, before Phase 0's pad-to-square + resize — that step breaks the true relative scale between the two images, and `cv2.matchTemplate` is not scale-invariant.
+2. The crop is located inside the raw photo via `cv2.matchTemplate` (`TM_CCORR_NORMED`), passing the crop's own binarized alpha channel as the match `mask` parameter. This masking is necessary, not optional: the crop's RGB is already zeroed everywhere its alpha is 0 (§1.2), so an unmasked correlation would let that irrelevant zeroed region corrupt the match score. (Verified in isolation: a synthetic template with 15/40 rows corrupted-and-masked was still located at its exact true offset with confidence 1.0.)
+3. The crop's real alpha channel is pasted into a blank black canvas the same size as the raw photo, at the matched `(x, y)` offset — this is the new mask, now genuinely in the raw photo's coordinate frame.
+4. Identical geometric preprocessing (pad-to-square, Lanczos resize to 256×256) is applied to *both* the raw photo and this new full-scale mask. Since both start from the same dimensions, `pad_to_square` makes the same padding decision for both, so they stay pixel-aligned all the way to the final 256×256 output.
+5. Output: `data/processed/aligned_raw/images/{patient_id}.jpg`, `data/processed/aligned_raw/masks/{patient_id}.png`, plus `alignment_log.csv` (per-patient match confidence and coordinates).
+
+**Verification results (all 217 patients):**
+- 217/217 aligned, 0 skipped; all 217 image/mask pairs are exactly 256×256 with zero dimension mismatches.
+- Match confidence: min 0.952, mean 0.992, max 0.998 — no low-confidence outliers.
+- Quantitative geometric proof: for `India_057`, the new mask's foreground-pixel fraction of the 256×256 canvas scaled down from the original crop's fraction by almost exactly the ratio pure geometry predicts (observed 0.0730 vs. expected `(1067/3984)² = 0.0717`, ~1.7% error) — confirming no pixels were lost, gained, or distorted in the relocation.
+- Visual spot-checks (5 patients, both countries: `India_001`, `India_057`, `India_089`, `Italy_001`, `Italy_050`) all show anatomically-sensible mask placement — precise thin crescents at the eyelid–sclera junction for small-crop (mostly India) patients, and near-full-frame coverage for `Italy_001` specifically, consistent with the already-documented finding that some Italy crops cover almost the entire source photo.
+
+**New dataset class:** `AlignedConjunctivaSegmentationDataset` (`scripts/dataset.py`) reads `(image, mask)` from `data/processed/aligned_raw/{images,masks}/` — image is the *full raw photo*, mask is a genuinely pixel-aligned tissue mask in that same frame. It is additive, not a replacement: `ConjunctivaSegmentationDataset` (§1.2) is unchanged and still valid for its original purpose (and for comparison); `AlignedConjunctivaSegmentationDataset` is the dataset to use going forward for a segmentation model intended to generalize to raw photos. Both are wired into `get_dataloaders()` (`seg_*` vs. `aligned_seg_*` keys) using the same `get_train_transforms()`/`get_eval_transforms()` pipeline (§1.3) — no new transform logic was needed, since both datasets share the same 256×256 RGB image / single-channel binary mask contract.
+
+**Not yet done:** `scripts/trainer_engine.py` and the three per-model entry-point scripts (§2.6) still train against the original `ConjunctivaSegmentationDataset`. Retargeting them at `AlignedConjunctivaSegmentationDataset` is a separate, deliberate follow-up step, not yet performed.
+
 ---
 
 ## Computational Environment / Hardware Setup
