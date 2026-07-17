@@ -54,6 +54,52 @@ LOGS_DIR = OUTPUTS_DIR / "logs"
 
 
 # --------------------------------------------------------------------------
+# Loss function
+# --------------------------------------------------------------------------
+class DiceLoss(nn.Module):
+    """Soft (differentiable) Dice loss computed from sigmoid probabilities
+    directly on logits -- NOT the same as compute_dice_iou below, which
+    thresholds to a hard binary mask and can't be backpropagated through."""
+
+    def __init__(self, eps: float = 1e-7):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        probs = torch.sigmoid(logits)
+        probs = probs.view(probs.size(0), -1)
+        targets = targets.view(targets.size(0), -1)
+
+        intersection = (probs * targets).sum(dim=1)
+        dice = (2 * intersection + self.eps) / (probs.sum(dim=1) + targets.sum(dim=1) + self.eps)
+        return 1.0 - dice.mean()
+
+
+class BCEDiceLoss(nn.Module):
+    """BCEWithLogitsLoss + soft Dice loss, averaged with bce_weight.
+
+    Plain per-pixel BCE lets a model minimize its loss by predicting
+    all-background whenever the true foreground is a tiny fraction of the
+    image -- with the raw-photo-aligned dataset, per-patient foreground can
+    be well under 1% of the 256x256 canvas (CLAUDE.md Sec 1.4), so BCE's
+    per-pixel average barely moves for getting that tiny region wrong,
+    and training can collapse to an all-zero prediction (val_dice pinned
+    at 0.0000 even as val_loss keeps decreasing). Dice loss is a ratio, not
+    a per-pixel average, so it stays scale-invariant to how small the true
+    foreground is and keeps penalizing an all-background prediction
+    heavily regardless."""
+
+    def __init__(self, bce_weight: float = 0.5, eps: float = 1e-7):
+        super().__init__()
+        self.bce = nn.BCEWithLogitsLoss()
+        self.dice = DiceLoss(eps=eps)
+        self.bce_weight = bce_weight
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        return self.bce_weight * self.bce(logits, targets) + (1 - self.bce_weight) * self.dice(logits, targets)
+
+
+# --------------------------------------------------------------------------
 # Metrics
 # --------------------------------------------------------------------------
 def compute_dice_iou(preds: torch.Tensor, targets: torch.Tensor, eps: float = 1e-7):
@@ -92,7 +138,7 @@ def train_one_epoch(model, loader, optimizer, criterion, device) -> float:
 @torch.no_grad()
 def evaluate(model, loader, criterion, device, threshold: float = 0.5):
     """Validation pass. Predictions are sigmoid(logits) thresholded at 0.5
-    into a binary mask before Dice/IoU are computed -- BCEWithLogitsLoss
+    into a binary mask before Dice/IoU are computed -- criterion (BCEDiceLoss)
     itself still consumes raw logits directly, for numerical stability."""
     model.eval()
     total_loss = total_dice = total_iou = 0.0
@@ -160,7 +206,7 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
         optimizer = torch.optim.AdamW(
             model.parameters(), lr=learning_rate, weight_decay=weight_decay
         )
-        criterion = nn.BCEWithLogitsLoss()
+        criterion = BCEDiceLoss()
 
         best_val_loss = float("inf")
         best_val_dice = 0.0
