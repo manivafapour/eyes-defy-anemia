@@ -1,0 +1,33 @@
+# Current Status — classification/ (Phase 4)
+
+Last updated: 2026-07-18
+
+## Where things stand
+This module was created from scratch this session as an intentionally isolated Phase 4 pipeline — no code or processed data imported from the root project's `scripts/`, `models/`, or `data/processed/`. Data preparation is complete and verified; the 6 training scripts are written and structurally sound; no actual training has been run yet.
+
+## Two decisions resolved before any code was written
+1. **Hgb thresholds.** The initial ask specified country/gender-specific thresholds (India Women<12.0, Men<14.0; Italy flat<10.5, no gender split) framed as "dataset-specific clinical thresholds." These were checked against `Dataset anemia.docx` (extracted fresh from `archive.zip`) and found to have **no source in the dataset's own documentation** — the docx describes acquisition/segmentation methodology only, no Hgb cutoffs. The thresholds also would have widened the already-large India/Italy anemia-rate gap (§0.5 of the root `CLAUDE.md`), amplifying a confound this project treats as a serious risk. **Resolved: project author chose to use WHO thresholds instead** (Male<13.0, Female<12.0, same rule both countries — identical to the root project's Phase 0 rule). Note: an exact-duplicate resend of the original (rejected) thresholds arrived later in the session; this was flagged rather than silently actioned, and WHO thresholds were confirmed as the operative decision.
+2. **Code reuse vs. full reimplementation.** Chose **full reimplementation from scratch** (no import from `scripts/phase0_prepare_dataset.py`) — a real, explicit trade-off: `classification/scripts/prepare_dataset.py` had to independently re-solve the same edge cases Phase 0 already found (comma-decimal Hgb parsing, the ELIMINATO scan across all columns, the iCCP CRC chunk repair), which cost real verification effort but achieves genuine zero-dependency isolation from the segmentation phase's code, per the explicit ask.
+
+## Two real bugs/findings caught during fresh implementation (not assumed correct)
+1. **`.convert("RGB")` alone does NOT give a clean black background.** Verified empirically: the raw crop's "transparent" (alpha=0) region has mean RGB ≈36 at native resolution, not ≈0 — real leftover pixel data, not pre-zeroed. The root project's near-zero measurement (`CLAUDE.md` §1.2, mean RGB ≈0.0000165) turned out to be a side-effect of Phase 0's own Lanczos resize being alpha-premultiplied, not a property of the source file itself — confirmed by replicating Phase 0's exact pad+resize sequence on the same raw file and reproducing the same near-zero number. **Fix used here:** an explicit `Image.alpha_composite` onto a solid black RGBA canvas before dropping the alpha channel — verified to give an exact 0.0 mean / 0 max in the transparent region, robust and not dependent on resize-algorithm side effects.
+2. **Typo-tolerant crop-file matching was necessary, and the first version missed a case.** `Italy/95`'s files are spelled `..._forniceal_palplebral.png` / `..._palplebral.png` (an 'l' swap), which a literal `"forniceal_palpebral" in filename` substring check silently misclassified as a plain forniceal-only file — the patient would have silently lost its forniceal_palpebral crop with no error. Fixed by matching Phase 0's own robust approach: the one PNG *without* "forniceal" in the name is always palpebral (spelling-independent), and among "forniceal"-containing PNGs, the longer filename is always the combined view. Added a self-check that raises on any folder with an unexpected count of forniceal-related files (not 0 or 2), so a *third* undiscovered spelling variant would surface loudly instead of silently misclassifying again. Re-ran after the fix: 211/217 forniceal_palpebral extractions succeeded, exactly matching the 6 folders (`Italy 1, 35, 54, 58, 75, 109`) the dataset's own documentation says lack an exposed forniceal conjunctiva — no other silent failures.
+
+## Verified data output
+- `data/processed/metadata.csv`: 217 patients (Italy_093 excluded, `ELIMINATO` flag) — **exactly matches** the root project's independently-computed Phase 0 count, same exclusion reason, same patient.
+- Label balance: 126 non-anemic / 91 anemic; India 71.6% anemic / Italy 18.9% anemic — matches root `CLAUDE.md` §0.5 figures exactly (expected, since exclusion criteria are threshold-independent and both pipelines now use the same WHO thresholds).
+- `data/processed/splits.csv`: 4-way stratified 70/15/15, train/val/test = 151/33/33, per-country breakdown matches the root project's `dataset_splits.csv` almost exactly (both used `random_state=42` on the same stratification key).
+- `data/processed/images/palpebral/`: 217 images, 256×256 RGB, clean black background (verified).
+- `data/processed/images/forniceal_palpebral/`: 211 images (6 legitimately missing, logged not silently dropped).
+- `data/processed/extraction_log.csv`: per-patient, per-tissue-type extraction status — the source of truth `TissueClassificationDataset` filters against.
+
+## Training engine design choices
+- All 3 backbones (ResNet18, MobileNetV3-Small, EfficientNet-B0) are **frozen except the replaced single-logit head** — a first-version, not-yet-fine-tuned choice given only ~151 training patients (real overfitting risk with full end-to-end fine-tuning at this scale).
+- `BCEWithLogitsLoss` with `pos_weight` computed per-trial from the train split's actual class ratio — addresses the mild (~1.4:1) raw label imbalance.
+- Evaluation metrics (accuracy/precision/recall/F1/AUC) are computed **both in aggregate and stratified by India vs. Italy**, every epoch, printed and persisted to the study summary JSON — this is the primary defense against the country-confound shortcut-learning risk, not an afterthought metric.
+- 12 Optuna trials per (architecture, tissue_type) combination, tuning `learning_rate` and `weight_decay` — matches the trial-count reasoning already established for the segmentation phase's aligned-dataset runs (enough trials to not be pure luck-of-the-draw, without exploding GPU/wall-clock cost for a first pass).
+
+## Immediate next step
+1. Structural verification: import-check all 6 entry scripts + `dataset.py` + `trainer_engine.py`, one dry batch fetch and one forward pass per architecture/tissue_type combo (6 total) to confirm shapes/dtypes — **no real training run** until that's done and reported.
+2. `git add`/commit `classification/` only (explicitly requested by the project author) — no push.
+3. Wait for explicit go-ahead before launching any of the 6 real Optuna training runs (each consumes real GPU time).
