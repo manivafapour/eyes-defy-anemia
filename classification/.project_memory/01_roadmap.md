@@ -13,8 +13,9 @@ High-level, sequential plan for this module only. `[x]` = done and verified (not
 - [x] Architecture registry: ResNet18, MobileNetV3-Small, EfficientNet-B0 — ImageNet-pretrained, frozen backbone, replaced single-logit head
 - [x] Optuna-driven training engine (`trainer_engine.py`) — BCEWithLogitsLoss with `pos_weight`, metrics reported both aggregate and stratified by country
 - [x] 6 thin entry-point scripts (3 architectures × 2 tissue types)
-- [ ] Structural verification (import check + one dry forward pass per architecture/tissue combo) — in progress
-- [ ] Actual Optuna training runs (all 6) — not started, separate explicit go-ahead needed before consuming real GPU time
+- [x] Structural verification (import check + one dry forward pass per architecture/tissue combo, all 6 combos)
+- [x] End-to-end local dry-run (1 trial, 1 epoch, `train_resnet18_palpebral` config, run through the real `run_study()` path) — DataLoader, forward/backward, `BCEWithLogitsLoss`, and country-stratified metric computation/persistence all confirmed working with zero runtime errors. Dry-run artifacts (checkpoint/logs) deleted afterward, not committed.
+- [ ] Actual Optuna training runs (all 6) — not started; to be executed externally on Kaggle, not locally (GPU/time budget). Local dry-run cleared this repo for a Kaggle pull.
 
 ## Not yet started
 - [ ] Compare palpebral vs. forniceal_palpebral as classification input across all 3 architectures

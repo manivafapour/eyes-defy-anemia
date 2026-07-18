@@ -27,7 +27,13 @@ This module was created from scratch this session as an intentionally isolated P
 - Evaluation metrics (accuracy/precision/recall/F1/AUC) are computed **both in aggregate and stratified by India vs. Italy**, every epoch, printed and persisted to the study summary JSON — this is the primary defense against the country-confound shortcut-learning risk, not an afterthought metric.
 - 12 Optuna trials per (architecture, tissue_type) combination, tuning `learning_rate` and `weight_decay` — matches the trial-count reasoning already established for the segmentation phase's aligned-dataset runs (enough trials to not be pure luck-of-the-draw, without exploding GPU/wall-clock cost for a first pass).
 
+## Local dry-run verification (before Kaggle handoff)
+Structural verification (import checks + one dry forward pass per architecture/tissue combo, all 6) was followed by a full end-to-end local dry-run: `run_study(arch_name="resnet18", tissue_type="palpebral", model_name="dryrun_resnet18_palpebral", n_trials=1)` with `MAX_EPOCHS` monkey-patched to 1 for the test only (not a permanent code change) — exercising the real `run_study()` path, not just isolated components. Result: **zero runtime errors.** DataLoader correctly produced the expected val split (33 = 14 India + 19 Italy), forward/backward/optimizer step completed, `BCEWithLogitsLoss` produced a sane loss value, and country-stratified metrics (accuracy/precision/recall/F1/AUC, both aggregate and India/Italy-separated) computed and printed correctly, and persisted correctly to a study summary JSON. The dry-run's own checkpoint/log artifacts (prefixed `dryrun_`) were deleted afterward — throwaway test output, not meant to be committed or confused with a real run.
+
+**Decision: actual Optuna training (all 6 scripts, real `n_trials=12`, real `MAX_EPOCHS=30`) will run externally on Kaggle**, not locally — same execution pattern as the root project's segmentation phase (local dry-run/smoke-test only, real GPU-time-consuming runs happen on Kaggle). This repo was pushed to GitHub specifically so the project author can pull it into a Kaggle notebook.
+
 ## Immediate next step
-1. Structural verification: import-check all 6 entry scripts + `dataset.py` + `trainer_engine.py`, one dry batch fetch and one forward pass per architecture/tissue_type combo (6 total) to confirm shapes/dtypes — **no real training run** until that's done and reported.
-2. `git add`/commit `classification/` only (explicitly requested by the project author) — no push.
-3. Wait for explicit go-ahead before launching any of the 6 real Optuna training runs (each consumes real GPU time).
+1. Project author pulls the latest commit into a Kaggle notebook.
+2. Run the 6 entry-point scripts on Kaggle (real 12-trial searches, real 30-epoch budgets with early stopping).
+3. Pull `classification/outputs/checkpoints/best_*.pth` + `classification/outputs/logs/*` back into this repo.
+4. Compare all 6 (architecture, tissue_type) combinations — both on aggregate metrics and, critically, on the per-country breakdown (a combination that's only good in aggregate because it's exploiting the country cue should be treated as a failure, not a win).
