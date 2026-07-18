@@ -1,6 +1,6 @@
 # Current Status — EYES-DEFY-ANEMIA
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Where things stand
 The aligned-photo segmentation dataset went through two major corrections this session and is now considered solid:
@@ -9,7 +9,7 @@ The aligned-photo segmentation dataset went through two major corrections this s
 2. **v2 alignment (SIFT/ORB + `cv2.findHomography(..., RANSAC)`)** replaced it — geometrically constrained, not a single appearance score. Result: 202/217 aligned, 15 honest failures (rejected by geometric sanity checks, not silently wrong). Visually confirmed correct on `India_071` + several spot-checks. Full writeup: `CLAUDE.md` §1.4.1 (v1) / §1.4.2 (v2).
 3. **The 15 failures are permanently excluded**, not manually fixed. A `cv2.selectROI` manual-bbox tool was built and actually run on all 15, but the project author rejected the approach (crude/inconsistent vs. the other 202's RANSAC-derived masks) — tool and its output discarded. `AlignedConjunctivaSegmentationDataset` now filters to `status == "ok"` (202) without touching the shared `dataset_splits.csv` (`ConjunctivaSegmentationDataset`/`AnemiaClassificationDataset` still see all 217). Verified: `aligned_seg_*` returns 143/28/31 (202); `seg_*`/`cls_*` unaffected at 151/33/33 (217). Side effect: exclusion skews India-heavy (13 India, 2 Italy dropped). Full detail: `CLAUDE.md` §1.4.3.
 
-**Training is authorized to proceed on this 202-patient aligned dataset.**
+**Training is authorized to proceed on this 202-patient aligned dataset.** The CLAUDE.md §1.4.2 gate ("no training until the project author has personally reviewed `verify_alignment_sanity_check.ipynb` and confirmed it") was explicitly cleared by the author on 2026-07-18 — recorded here since the review-confirmation event itself wasn't previously logged anywhere checkable.
 
 ## The collapse mystery — two fixes applied, root cause still not 100% certain
 An early Kaggle training attempt on the (since-discarded, v1) aligned dataset collapsed to all-background (`val_dice` pinned at `0.0000`, `val_loss` stuck ~0.60–0.61). Two things happened in response:
@@ -35,9 +35,16 @@ An early Kaggle training attempt on the (since-discarded, v1) aligned dataset co
 
 **Aligned dataset (v2, 202 patients, with the loss comparison):** no training has been run yet.
 
+## 2026-07-18 session: pre-flight check before the real Kaggle run
+Before triggering the actual Kaggle training, this session verified the state left by the previous one and found one real bug:
+- **`data/processed/aligned_raw.zip` (sitting in the working dir, untracked) was stale v1 data** — its `alignment_log.csv` had the old template-matching schema (`status,confidence,match_x,match_y,...`, 217/217 "ok"), i.e. the *discarded, proven-wrong* dataset (sclera-mask bug, §1.4.1), not the current 202-patient v2 SIFT/RANSAC data. Had this been uploaded to Kaggle as-is, it would have silently resurrected the exact bug that was already found and fixed. **Regenerated correctly** from the current `data/processed/aligned_raw/` directory on disk (which was already correct — v2 schema, 202 ok / 15 failed) — verified the new zip's `alignment_log.csv` now shows the SIFT-schema columns and 202 images/masks.
+- `n_trials` was confirmed still at the engine default of 5, not bumped to 10-12 as `.project_memory` had only *recommended* (never implemented) — matches the project author's own recollection. **Decision: the three `_aligned` entry-point scripts now explicitly pass `n_trials=12`** (`run_study(..., n_trials=12)`), overriding the shared engine's 5-trial default. The three original crop-based scripts are untouched (still implicitly 5, matching their already-logged §3.5/§3.6 results). See `CLAUDE.md` §3.4 for the rationale (loss_fn as a 3rd tuned dimension needs more trials for fair bce_dice/focal_tversky coverage).
+- `my_valuable_outputs.zip` (351MB, untracked) confirmed as a backup of the original crop-based Kaggle run's checkpoints/logs (§3.6) — fine as-is, no action taken.
+- No Kaggle CLI is installed/configured in this environment, and there's no in-repo Kaggle setup/upload script — the actual upload to Kaggle and running of the 3 `_aligned` notebooks remains a manual, external step for the project author.
+
 ## Immediate next step
-1. Get `aligned_raw/` (v2, 202 patients) onto Kaggle — the previous upload is stale (v1 data). Update the Kaggle-side copy/setup script, `git pull` the latest code.
-2. Run the 3 `_aligned` entry-point scripts on Kaggle. Consider raising `n_trials` above the default 5 (e.g. 10-12) — with `loss_fn` now a 3rd tuned dimension, more trials are needed to get meaningful coverage of both losses.
+1. **Project author uploads the corrected `data/processed/aligned_raw.zip` to Kaggle** (new dataset version — the old one there is the stale v1 data, same bug as the local zip had). `git pull` the latest code (includes the `n_trials=12` change).
+2. Run the 3 `_aligned` entry-point scripts on Kaggle (now 12 trials each, per-loss-function comparison built in).
 3. Pull `outputs/checkpoints/best_*_aligned*.pth` + `outputs/logs/*_aligned_*` back into this repo.
 4. Compare `bce_dice` vs. `focal_tversky` via the per-loss comparison table in the study summary JSON.
 5. **Re-run a domain-shift check** — does the winning model actually isolate tissue on a raw photo? This is still the entire point of the original pivot; don't skip it.

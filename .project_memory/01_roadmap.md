@@ -26,7 +26,7 @@ High-level, sequential plan for the whole project. `[x]` = done and verified (no
 - [x] Optuna training engine (5-trial TPE search, early stopping, Dice/IoU, checkpoint + log persistence)
 - [x] Model-switching *and* dataset-switching entry-point scripts
 - [x] Trained on the ORIGINAL crop-based dataset via Kaggle, all 3 models (results logged — see `02_current_status.md` for what's verified vs. user-reported)
-- [ ] Retrain all 3 models on the ALIGNED raw-photo dataset (202 patients) — infrastructure ready, including a `bce_dice` vs. `focal_tversky` side-by-side loss comparison (Optuna-tuned `loss_fn` categorical, `CLAUDE.md` §3.2b) — not yet run
+- [ ] Retrain all 3 models on the ALIGNED raw-photo dataset (202 patients) — infrastructure ready, including a `bce_dice` vs. `focal_tversky` side-by-side loss comparison (Optuna-tuned `loss_fn` categorical, `CLAUDE.md` §3.2b), now with `n_trials=12` for adequate per-loss coverage — not yet run (upload of corrected `aligned_raw.zip` to Kaggle is the pending manual step)
 - [ ] Verify the aligned-trained model actually generalizes to raw photos (repeat the domain-shift check that failed before)
 
 ## Phase 3 — Tissue Isolation / Cropping

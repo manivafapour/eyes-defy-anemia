@@ -1,5 +1,5 @@
 """
-Entry point: run the 5-trial Optuna hyperparameter search for Model 1
+Entry point: run the 12-trial Optuna hyperparameter search for Model 1
 (Standard U-Net) against the raw-photo-aligned dataset (CLAUDE.md Sec 1.4),
 via the shared engine in trainer_engine.py. Designed to run standalone
 (e.g. `python scripts/train_standard_unet_aligned.py` on Kaggle) with no
@@ -9,6 +9,11 @@ model_name is "unet_aligned", not "unet" -- this keeps every output
 (outputs/checkpoints/best_unet_aligned.pth, outputs/logs/unet_aligned_*)
 distinct from the original crop-based run, so this does not overwrite the
 existing best_unet.pth / unet_* logs already produced.
+
+n_trials=12 (not the engine's 5-trial default, CLAUDE.md Sec 3.4) --
+loss_fn is now a 3rd Optuna-tuned dimension alongside learning_rate/
+weight_decay (Sec 3.2b), and 5 trials gives too little coverage to compare
+bce_dice vs. focal_tversky meaningfully.
 """
 
 import sys
@@ -26,4 +31,5 @@ if __name__ == "__main__":
         model_cls=UNet,
         model_name="unet_aligned",
         dataset_cls=AlignedConjunctivaSegmentationDataset,
+        n_trials=12,
     )

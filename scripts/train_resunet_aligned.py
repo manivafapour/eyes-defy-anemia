@@ -1,5 +1,5 @@
 """
-Entry point: run the 5-trial Optuna hyperparameter search for Model 3
+Entry point: run the 12-trial Optuna hyperparameter search for Model 3
 (ResUNet) against the raw-photo-aligned dataset (CLAUDE.md Sec 1.4), via
 the shared engine in trainer_engine.py. Designed to run standalone (e.g.
 `python scripts/train_resunet_aligned.py` on Kaggle) with no shared code
@@ -7,6 +7,11 @@ to edit -- the model + dataset choice lives entirely in this file.
 
 model_name is "resunet_aligned", not "resunet" -- this keeps every output
 distinct from the original crop-based run.
+
+n_trials=12 (not the engine's 5-trial default, CLAUDE.md Sec 3.4) --
+loss_fn is now a 3rd Optuna-tuned dimension alongside learning_rate/
+weight_decay (Sec 3.2b), and 5 trials gives too little coverage to compare
+bce_dice vs. focal_tversky meaningfully.
 """
 
 import sys
@@ -24,4 +29,5 @@ if __name__ == "__main__":
         model_cls=ResUNet,
         model_name="resunet_aligned",
         dataset_cls=AlignedConjunctivaSegmentationDataset,
+        n_trials=12,
     )
