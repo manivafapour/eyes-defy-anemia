@@ -17,6 +17,15 @@ High-level, sequential plan for this module only. `[x]` = done and verified (not
 - [x] End-to-end local dry-run (1 trial, 1 epoch, `train_resnet18_palpebral` config, run through the real `run_study()` path) — DataLoader, forward/backward, `BCEWithLogitsLoss`, and country-stratified metric computation/persistence all confirmed working with zero runtime errors. Dry-run artifacts (checkpoint/logs) deleted afterward, not committed.
 - [ ] Actual Optuna training runs (all 6) — not started; to be executed externally on Kaggle, not locally (GPU/time budget). Local dry-run cleared this repo for a Kaggle pull.
 
+## Thesis-grade evaluation upgrade (implemented and verified 2026-07-18)
+- [x] Stratified confusion matrix (overall + India + Italy), computed every epoch, plotted as a 3-panel figure for the best trial only
+- [x] F1/precision/recall — already computed; now included directly in the per-country JSON summary alongside the new confusion matrix/ROC data
+- [x] ROC curve plot (fpr/tpr persisted per epoch, plotted for the best trial's "overall" curve only; per-country fpr/tpr data is also computed and saved in the JSON even though only "overall" gets plotted, since only the confusion matrix was explicitly requested stratified)
+- [x] Train vs. validation loss curves over epochs — per-epoch history now persisted via `trial.set_user_attr()` on every trial, plotted for the best trial only
+- [x] Plotting strictly scoped to the single best trial per model (`study.best_trial`) — verified no plot is generated for non-winning trials
+- [x] Verified via a real end-to-end local dry-run (1 trial, 1 epoch, resnet18/palpebral): all 3 plots (loss curve, ROC curve, confusion matrices) generated correctly, visually inspected, matched the JSON data exactly. Dry-run artifacts deleted after verification, not committed.
+- Requested 2026-07-18, implemented and verified same day. See `02_current_status.md` for full detail.
+
 ## Not yet started
 - [ ] Compare palpebral vs. forniceal_palpebral as classification input across all 3 architectures
 - [ ] Decide on a winning (architecture, tissue_type) combination

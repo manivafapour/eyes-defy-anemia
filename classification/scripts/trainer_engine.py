@@ -35,11 +35,23 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")  # headless -- this runs on Kaggle containers too, no display available
+import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import torch
 import torch.nn as nn
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    roc_curve,
+)
 from torch.utils.data import DataLoader
 from torchvision import models
 
@@ -63,6 +75,7 @@ N_TRIALS = 12  # loss/lr/weight_decay search over a small (~151-patient) train s
 OUTPUTS_DIR = MODULE_ROOT / "outputs"
 CHECKPOINTS_DIR = OUTPUTS_DIR / "checkpoints"
 LOGS_DIR = OUTPUTS_DIR / "logs"
+PLOTS_DIR = OUTPUTS_DIR / "plots"
 
 COUNTRIES = ["India", "Italy"]
 
@@ -116,7 +129,12 @@ def compute_metrics(labels: np.ndarray, probs: np.ndarray, countries: np.ndarray
     """labels/probs/countries are aligned 1D arrays over one evaluation
     pass. Returns aggregate metrics plus a per-country breakdown -- the
     per-country lens is what actually exposes the India/Italy confound
-    (CLAUDE.md Sec 0.5); aggregate accuracy alone cannot."""
+    (CLAUDE.md Sec 0.5); aggregate accuracy alone cannot. Confusion matrix
+    and ROC curve data (fpr/tpr) are computed for all three buckets
+    (overall/India/Italy) uniformly -- cheap, and stratified confusion
+    matrices are an explicit thesis requirement; only the "overall" ROC
+    curve actually gets plotted (see _save_outputs), matching what was
+    asked for without discarding the per-country curve data."""
     preds = (probs > threshold).astype(float)
 
     def _safe_metrics(y_true, y_pred, y_prob):
@@ -128,11 +146,18 @@ def compute_metrics(labels: np.ndarray, probs: np.ndarray, countries: np.ndarray
             "precision": float(precision_score(y_true, y_pred, zero_division=0)),
             "recall": float(recall_score(y_true, y_pred, zero_division=0)),
             "f1": float(f1_score(y_true, y_pred, zero_division=0)),
+            # labels=[0,1] forces a full 2x2 matrix even if one class is
+            # entirely absent from this slice (small per-country n makes
+            # that a real possibility, not just a defensive formality).
+            "confusion_matrix": confusion_matrix(y_true, y_pred, labels=[0, 1]).tolist(),
         }
         if len(set(y_true.tolist())) > 1:
             out["auc"] = float(roc_auc_score(y_true, y_prob))
+            fpr, tpr, _thresholds = roc_curve(y_true, y_prob)
+            out["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
         else:
             out["auc"] = None  # undefined with only one class present in this slice
+            out["roc_curve"] = None
         return out
 
     result = {"overall": _safe_metrics(labels, preds, probs)}
@@ -230,11 +255,15 @@ def make_objective(arch_name: str, tissue_type: str, model_name: str):
         best_val_f1 = -1.0
         best_val_metrics = None
         epochs_without_improvement = 0
+        train_loss_history = []
+        val_loss_history = []
 
         for epoch in range(1, MAX_EPOCHS + 1):
             train_loss = train_one_epoch(model, train_loader, optimizer, criterion, DEVICE)
             val_loss, val_metrics = evaluate(model, val_loader, criterion, DEVICE)
             val_f1 = val_metrics["overall"]["f1"]
+            train_loss_history.append(train_loss)
+            val_loss_history.append(val_loss)
 
             if val_f1 > best_val_f1:
                 best_val_f1 = val_f1
@@ -263,6 +292,8 @@ def make_objective(arch_name: str, tissue_type: str, model_name: str):
                     break
 
         trial.set_user_attr("best_val_metrics", best_val_metrics)
+        trial.set_user_attr("train_loss_history", train_loss_history)
+        trial.set_user_attr("val_loss_history", val_loss_history)
         trial.set_user_attr("model_name", model_name)
         return best_val_f1
 
@@ -300,21 +331,106 @@ def run_study(arch_name: str, tissue_type: str, model_name: str, n_trials: int =
     return study
 
 
+def _plot_loss_curve(model_name: str, trial_number: int, train_loss_history: list, val_loss_history: list) -> Path:
+    epochs = range(1, len(train_loss_history) + 1)
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(epochs, train_loss_history, label="train loss", marker="o", markersize=3)
+    ax.plot(epochs, val_loss_history, label="val loss", marker="o", markersize=3)
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("BCEWithLogitsLoss")
+    ax.set_title(f"{model_name} -- train vs val loss (best trial #{trial_number})")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    path = PLOTS_DIR / f"{model_name}_loss_curve.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_roc_curve(model_name: str, trial_number: int, roc: dict, auc: float) -> Path:
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot(roc["fpr"], roc["tpr"], label=f"AUC = {auc:.3f}")
+    ax.plot([0, 1], [0, 1], linestyle="--", color="gray", label="chance")
+    ax.set_xlabel("False Positive Rate")
+    ax.set_ylabel("True Positive Rate")
+    ax.set_title(f"{model_name} -- ROC curve, overall (best trial #{trial_number})")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    path = PLOTS_DIR / f"{model_name}_roc_curve.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_confusion_matrices(model_name: str, trial_number: int, best_val_metrics: dict) -> Path:
+    """Stratified confusion matrix -- overall, India, Italy side by side --
+    the primary confound-monitoring artifact requested for this phase."""
+    buckets = ["overall", "India", "Italy"]
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    for ax, bucket in zip(axes, buckets):
+        cm = best_val_metrics[bucket].get("confusion_matrix")
+        n = best_val_metrics[bucket]["n"]
+        if cm is None:
+            ax.set_title(f"{bucket} (n={n})\nno data")
+            ax.axis("off")
+            continue
+        cm = np.array(cm)
+        ax.imshow(cm, cmap="Blues")
+        for i in range(2):
+            for j in range(2):
+                ax.text(j, i, str(cm[i, j]), ha="center", va="center", fontsize=14)
+        ax.set_xticks([0, 1])
+        ax.set_yticks([0, 1])
+        ax.set_xticklabels(["Non-anemic", "Anemic"])
+        ax.set_yticklabels(["Non-anemic", "Anemic"])
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("True")
+        ax.set_title(f"{bucket} (n={n})")
+    fig.suptitle(f"{model_name} -- stratified confusion matrix (best trial #{trial_number})")
+    fig.tight_layout()
+    path = PLOTS_DIR / f"{model_name}_confusion_matrices.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 def _save_outputs(study: optuna.Study, model_name: str) -> None:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     trials_df = study.trials_dataframe()
     trials_csv_path = LOGS_DIR / f"{model_name}_trials.csv"
     trials_df.to_csv(trials_csv_path, index=False)
+
+    best_trial = study.best_trial
+    best_val_metrics = best_trial.user_attrs["best_val_metrics"]
+    train_loss_history = best_trial.user_attrs["train_loss_history"]
+    val_loss_history = best_trial.user_attrs["val_loss_history"]
+
+    # Plots are generated ONLY here, once, from the single best trial's data
+    # -- never per-trial (explicit constraint: avoid plot clutter across an
+    # entire Optuna search).
+    plot_paths = {
+        "loss_curve": str(_plot_loss_curve(model_name, best_trial.number, train_loss_history, val_loss_history)),
+        "confusion_matrices": str(_plot_confusion_matrices(model_name, best_trial.number, best_val_metrics)),
+    }
+    overall_roc = best_val_metrics["overall"].get("roc_curve")
+    if overall_roc is not None:
+        plot_paths["roc_curve"] = str(
+            _plot_roc_curve(model_name, best_trial.number, overall_roc, best_val_metrics["overall"]["auc"])
+        )
+    else:
+        print(f"[{model_name}] Skipping ROC curve plot -- best trial's val set had only one class present.")
 
     summary = {
         "model_name": model_name,
         "n_trials_run": len(study.trials),
         "best_trial_number": study.best_trial.number,
         "best_val_f1": study.best_value,
-        "best_val_metrics_by_country": study.best_trial.user_attrs["best_val_metrics"],
+        "best_val_metrics_by_country": best_val_metrics,
         "best_params": study.best_params,
         "checkpoint_path": str(CHECKPOINTS_DIR / f"best_{model_name}.pth"),
+        "plot_paths": plot_paths,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -324,3 +440,4 @@ def _save_outputs(study: optuna.Study, model_name: str) -> None:
 
     print(f"\nSaved per-trial metrics to {trials_csv_path}")
     print(f"Saved best-trial summary to {summary_json_path}")
+    print(f"Saved plots (best trial only): {list(plot_paths.values())}")

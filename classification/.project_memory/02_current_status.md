@@ -32,8 +32,23 @@ Structural verification (import checks + one dry forward pass per architecture/t
 
 **Decision: actual Optuna training (all 6 scripts, real `n_trials=12`, real `MAX_EPOCHS=30`) will run externally on Kaggle**, not locally — same execution pattern as the root project's segmentation phase (local dry-run/smoke-test only, real GPU-time-consuming runs happen on Kaggle). This repo was pushed to GitHub specifically so the project author can pull it into a Kaggle notebook.
 
+## Currently implemented evaluation surface (updated 2026-07-18, thesis-grade upgrade)
+- **Loss:** `BCEWithLogitsLoss` with `pos_weight` computed per-trial from the train split's class ratio.
+- **Performance metrics**, computed every epoch via `compute_metrics()` (`sklearn.metrics`): accuracy, precision, recall, F1, ROC-AUC, confusion matrix (`labels=[0,1]`, always a full 2x2 even if one class is absent from a slice), and ROC curve data (fpr/tpr) — all computed **both in aggregate and stratified by country** (India/Italy). Only the "overall" ROC curve is ever plotted (matching the literal request, which stratified the confusion matrix but not the ROC curve); per-country fpr/tpr is still computed and saved in the JSON as a low-cost byproduct of the existing per-country loop, not discarded.
+- **Per-epoch history is now persisted**, closing the previous gap: `train_loss_history`/`val_loss_history` (plain float lists) are appended every epoch and stashed via `trial.set_user_attr()` on **every** trial (small enough not to matter for the trials CSV — this is not the "clutter" the plotting constraint below is about).
+- **Plots — generated and saved ONLY for the single best trial per model** (`study.best_trial`, read once inside `_save_outputs()` after `study.optimize()` finishes), never per-trial:
+  - `{model_name}_loss_curve.png` — train vs. val loss over epochs.
+  - `{model_name}_roc_curve.png` — overall ROC curve with AUC annotated (skipped with a printed message if the best trial's val set somehow had only one class present — not expected with 33 val patients, defensive only).
+  - `{model_name}_confusion_matrices.png` — 3-panel (overall/India/Italy) stratified confusion matrix, the primary confound-monitoring artifact.
+  - Saved to `classification/outputs/plots/` (new directory, not gitignored — small PNGs, same "citable artifact" status as `outputs/logs/`, not `outputs/checkpoints/`).
+- **Study summary JSON** (`{model_name}_study_summary.json`) now also includes a `plot_paths` dict pointing at the 3 saved images, alongside the existing `best_val_metrics_by_country` (which now carries confusion_matrix + roc_curve nested in each of overall/India/Italy).
+- `matplotlib` added as a dependency (already present in the shared venv, no install needed) — forced to the `"Agg"` headless backend, since this code also needs to run on a Kaggle container with no display.
+
+## Verification: local dry-run with the new logging/plotting (2026-07-18)
+Re-ran the same 1-trial/1-epoch dry-run pattern used for the original engine verification (`resnet18`/`palpebral`, `MAX_EPOCHS` monkey-patched to 1, not a permanent change). Zero exceptions. All 3 plot files were generated, confirmed to be valid non-corrupt PNGs (`PIL.Image.open` succeeded, correct format/dimensions), and **visually inspected** (not just file-existence-checked) — confusion matrix panel counts matched the JSON exactly, ROC curve rendered correctly with the AUC value matching the JSON, loss curve rendered the single epoch's train/val points correctly (will show a proper multi-point curve on a real 30-epoch Kaggle run). Dry-run artifacts (checkpoint, logs, plots, all prefixed `dryrun_`) were deleted afterward — not committed, consistent with the earlier dry-run's cleanup precedent.
+
 ## Immediate next step
 1. Project author pulls the latest commit into a Kaggle notebook.
-2. Run the 6 entry-point scripts on Kaggle (real 12-trial searches, real 30-epoch budgets with early stopping).
-3. Pull `classification/outputs/checkpoints/best_*.pth` + `classification/outputs/logs/*` back into this repo.
-4. Compare all 6 (architecture, tissue_type) combinations — both on aggregate metrics and, critically, on the per-country breakdown (a combination that's only good in aggregate because it's exploiting the country cue should be treated as a failure, not a win).
+2. Run the 6 entry-point scripts on Kaggle (real 12-trial searches, real 30-epoch budgets with early stopping) — will now also produce `outputs/plots/{model_name}_{loss_curve,roc_curve,confusion_matrices}.png` for each model's best trial.
+3. Pull `classification/outputs/{checkpoints/best_*.pth, logs/*, plots/*}` back into this repo.
+4. Compare all 6 (architecture, tissue_type) combinations — both on aggregate metrics and, critically, on the per-country breakdown (a combination that's only good in aggregate because it's exploiting the country cue should be treated as a failure, not a win). The stratified confusion matrices are now the fastest way to eyeball this.
