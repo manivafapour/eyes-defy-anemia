@@ -23,25 +23,42 @@ For every retained patient (per data/processed/dataset_splits.csv):
 1. Read the original raw photo and palpebral crop from archive.zip
    (reusing phase0_prepare_dataset's own file-finding/corruption-repair
    logic, so this stays consistent with Phase 0's exclusion/repair rules).
-2. Detect SIFT keypoints/descriptors in the crop (restricted to its alpha>0
-   region -- the RGB is zeroed everywhere else, so there is no real texture
-   there to (mis)match against) and in the full raw photo.
-3. Match descriptors (BFMatcher + Lowe's ratio test), then estimate a
+2. Determine which convention this patient's crop uses to delimit tissue,
+   and build the foreground mask accordingly (CLAUDE.md Sec 1.4.4):
+     - Normal case: the alpha channel is a real cutout (RGB zeroed outside
+       it) -- mask = alpha > ALPHA_THRESHOLD.
+     - Fallback case: the alpha channel is uniformly (or near-uniformly)
+       opaque, or absent entirely -- this means the source file instead
+       uses an OPAQUE WHITE background to delimit tissue, so alpha carries
+       no shape information at all. Mask = NOT-near-white RGB instead
+       (_white_background_mask). Detected automatically per-patient via
+       _alpha_is_functional(), not a hardcoded patient list.
+3. Detect SIFT keypoints/descriptors in the crop (restricted to that mask
+   -- background pixels have no real texture there to (mis)match against)
+   and in the full raw photo.
+4. Match descriptors (BFMatcher + Lowe's ratio test), then estimate a
    homography via cv2.findHomography(..., cv2.RANSAC) from the surviving
    correspondences. Falls back to ORB if SIFT does not find enough matches.
-4. Warp the crop's real alpha channel through that homography into the raw
-   photo's coordinate frame via cv2.warpPerspective -- this is the mask,
-   now correctly scaled/rotated/positioned in the raw photo's own grid.
-5. Apply IDENTICAL pad-to-square + Lanczos-resize-to-256 to both the raw
+5. Warp the crop's mask (real alpha channel, or the white-background
+   fallback mask) through that homography into the raw photo's coordinate
+   frame via cv2.warpPerspective -- this is the mask, now correctly
+   scaled/rotated/positioned in the raw photo's own grid.
+6. Apply IDENTICAL pad-to-square + Lanczos-resize-to-256 to both the raw
    photo and this new full-scale mask (same input size -> same padding
    decision -> the two stay pixel-aligned).
-6. Save to data/processed/aligned_raw/{images,masks}/.
+7. Save to data/processed/aligned_raw/{images,masks}/, with alignment_log.csv
+   additionally recording which mask_source each patient used.
 
-IMPORTANT: this script's output has NOT been declared correct. A human
-visual check (notebooks/verify_alignment_sanity_check.ipynb) is required
-before this data is used for any training -- see that notebook's own
-verification, including India_071 specifically (the patient that exposed
-the previous approach's failure).
+IMPORTANT: this script's output requires a human visual check
+(notebooks/verify_alignment_sanity_check.ipynb) before being used for
+training -- see that notebook's own verification, including India_071
+specifically (the patient that exposed the earlier matchTemplate
+approach's failure). The white-background fallback (step 2 above) was
+itself added after a *separate* human visual check
+(notebooks/find_corrupted_masks.ipynb) caught 30 patients whose masks
+covered ~75% of the frame under the old alpha-only logic -- any full
+regeneration after this fix should be re-verified the same way before
+being trusted for training.
 """
 
 import io
@@ -78,6 +95,22 @@ LOG_CSV = OUTPUT_ROOT / "alignment_log.csv"
 
 TARGET_SIZE = 256
 ALPHA_THRESHOLD = 127
+
+# A subset of patients' source palpebral crop PNGs (all confirmed Italy so
+# far) use an OPAQUE WHITE background instead of alpha transparency to
+# delimit the tissue -- i.e. a different source-data convention, not missing
+# data. Their alpha channel is uniformly (or near-uniformly) opaque and
+# therefore carries no shape information at all, even though it never
+# raises/errors anywhere -- (alpha > ALPHA_THRESHOLD) silently evaluates to
+# "the entire rectangle is foreground". Verified across the full 217-patient
+# source data: legitimate alpha-cutout patients top out at ~13% opaque
+# fraction (Italy_113); every affected patient sits at exactly 100%. Any
+# threshold between those two clusters is safe -- 0.99 is used here for a
+# wide margin. notebooks/find_corrupted_masks.ipynb has the full
+# investigation (root cause, before/after visual + quantitative
+# verification on Italy_022/Italy_004).
+OPAQUE_ALPHA_FRACTION_THRESHOLD = 0.99
+WHITE_BACKGROUND_THRESHOLD = 245  # RGB >= this in all 3 channels counts as background
 
 LOWE_RATIO = 0.75
 MIN_GOOD_MATCHES = 4          # cv2.findHomography's hard minimum
@@ -225,6 +258,30 @@ def find_homography_alignment(raw_gray: np.ndarray, crop_gray: np.ndarray, crop_
 
 
 # --------------------------------------------------------------------------
+# Mask extraction: alpha-cutout convention, or white-background fallback
+# --------------------------------------------------------------------------
+def _alpha_is_functional(crop_pil: Image.Image) -> bool:
+    """True if this crop's alpha channel actually encodes a tissue cutout
+    (real, non-trivial transparency) rather than being uniformly opaque or
+    absent entirely. A crop with no alpha channel at all (plain RGB) is
+    treated the same as a uniformly-opaque one -- both carry zero shape
+    information, just via different underlying causes."""
+    if crop_pil.mode != "RGBA":
+        return False
+    alpha = np.array(crop_pil)[..., 3]
+    opaque_fraction = (alpha > ALPHA_THRESHOLD).mean()
+    return opaque_fraction < OPAQUE_ALPHA_FRACTION_THRESHOLD
+
+
+def _white_background_mask(crop_rgb: np.ndarray) -> np.ndarray:
+    """Foreground = NOT near-white. Fallback for patients whose source crop
+    delimits tissue with an opaque white background instead of alpha
+    transparency -- see OPAQUE_ALPHA_FRACTION_THRESHOLD above."""
+    is_background = (crop_rgb >= WHITE_BACKGROUND_THRESHOLD).all(axis=-1)
+    return (~is_background).astype(np.uint8) * 255
+
+
+# --------------------------------------------------------------------------
 # Per-patient processing
 # --------------------------------------------------------------------------
 def process_patient(zf: zipfile.ZipFile, country: str, number: int, patient_id: str) -> dict:
@@ -234,12 +291,19 @@ def process_patient(zf: zipfile.ZipFile, country: str, number: int, patient_id: 
     raw_img = ImageOps.exif_transpose(raw_img).convert("RGB")
     raw_array = np.array(raw_img)
 
-    crop_rgba = np.array(
-        Image.open(io.BytesIO(sanitize_png_bytes(zf.read(png_name)))).convert("RGBA")
-    )
+    crop_pil = Image.open(io.BytesIO(sanitize_png_bytes(zf.read(png_name))))
+    mask_source = "alpha" if _alpha_is_functional(crop_pil) else "white_bg"
+
+    crop_rgba = np.array(crop_pil.convert("RGBA"))
     crop_rgb = crop_rgba[..., :3]
-    crop_alpha = crop_rgba[..., 3]
-    crop_alpha_mask = (crop_alpha > ALPHA_THRESHOLD).astype(np.uint8) * 255
+
+    if mask_source == "alpha":
+        crop_alpha = crop_rgba[..., 3]
+        crop_alpha_mask = (crop_alpha > ALPHA_THRESHOLD).astype(np.uint8) * 255
+        warp_source = crop_alpha
+    else:
+        crop_alpha_mask = _white_background_mask(crop_rgb)
+        warp_source = crop_alpha_mask
 
     raw_h, raw_w = raw_array.shape[:2]
     crop_h, crop_w = crop_rgb.shape[:2]
@@ -251,7 +315,7 @@ def process_patient(zf: zipfile.ZipFile, country: str, number: int, patient_id: 
         alignment = find_homography_alignment(raw_gray, crop_gray, crop_alpha_mask)
     except AlignmentFailure as exc:
         tqdm.write(f"[FAIL] {patient_id}: {exc}")
-        return {"patient_id": patient_id, "status": f"failed: {exc}", "n_inliers": None}
+        return {"patient_id": patient_id, "status": f"failed: {exc}", "n_inliers": None, "mask_source": mask_source}
 
     if alignment["n_inliers"] < MIN_INLIERS_TRUSTED:
         tqdm.write(
@@ -260,7 +324,7 @@ def process_patient(zf: zipfile.ZipFile, country: str, number: int, patient_id: 
         )
 
     full_mask = cv2.warpPerspective(
-        crop_alpha, alignment["H"], (raw_w, raw_h), flags=cv2.INTER_LINEAR, borderValue=0
+        warp_source, alignment["H"], (raw_w, raw_h), flags=cv2.INTER_LINEAR, borderValue=0
     )
 
     # Identical geometric preprocessing for both -- same input size means
@@ -279,6 +343,7 @@ def process_patient(zf: zipfile.ZipFile, country: str, number: int, patient_id: 
         "patient_id": patient_id,
         "status": "ok",
         "method": alignment["method"],
+        "mask_source": mask_source,
         "n_keypoints_crop": alignment["n_keypoints_crop"],
         "n_keypoints_raw": alignment["n_keypoints_raw"],
         "n_good_matches": alignment["n_good_matches"],
@@ -309,6 +374,20 @@ def main():
     log_df = pd.DataFrame(log_rows)
     log_df.to_csv(LOG_CSV, index=False)
 
+    # process_patient() only WRITES output files for patients that succeed --
+    # a patient that succeeded in a previous run but fails in this one (e.g.
+    # after a logic change like CLAUDE.md Sec 1.4.4's mask-source fix) would
+    # otherwise leave its stale, no-longer-valid output files on disk
+    # indefinitely, since nothing ever deletes them. Caught for real: a
+    # re-run after the 1.4.4 fix left Italy_026's old (wrong, alpha-derived)
+    # image/mask on disk even though it now correctly fails alignment.
+    ok_ids = set(log_df.loc[log_df["status"] == "ok", "patient_id"])
+    for out_dir, suffix in [(IMAGES_OUT_DIR, ".jpg"), (MASKS_OUT_DIR, ".png")]:
+        for existing_file in out_dir.glob(f"*{suffix}"):
+            if existing_file.stem not in ok_ids:
+                existing_file.unlink()
+                print(f"Removed orphaned output from a previous run: {existing_file}")
+
     n_ok = int((log_df["status"] == "ok").sum())
     n_failed = len(log_df) - n_ok
     print(f"\nAligned {n_ok}/{len(log_df)} patients ({n_failed} failed).")
@@ -321,6 +400,8 @@ def main():
         )
         n_low_confidence = int((ok_rows["n_inliers"] < MIN_INLIERS_TRUSTED).sum())
         print(f"Low-confidence alignments (< {MIN_INLIERS_TRUSTED} inliers): {n_low_confidence}")
+        print("\nMask source (alpha cutout vs. white-background fallback, CLAUDE.md Sec 1.4.4):")
+        print(log_df["mask_source"].value_counts(dropna=False))
     if n_failed:
         print(log_df[log_df["status"] != "ok"][["patient_id", "status"]])
     print(f"Log written to {LOG_CSV}")

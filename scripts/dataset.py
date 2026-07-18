@@ -173,14 +173,14 @@ class AlignedConjunctivaSegmentationDataset(Dataset):
     (data/processed/aligned_raw/masks/{patient_id}.png). Binarized to
     {0.0, 1.0} and shaped [1, H, W], same as ConjunctivaSegmentationDataset.
 
-    Only 202 of 217 patients have a successful alignment (15 were rejected
+    Only 201 of 217 patients have a successful alignment (16 were rejected
     by build_aligned_dataset.py's geometric sanity checks and, per a
     deliberate decision, are excluded rather than manually annotated --
-    see CLAUDE.md Sec 1.4.3). This class filters to those 202 by joining
+    see CLAUDE.md Sec 1.4.3). This class filters to those 201 by joining
     against alignment_log.csv, WITHOUT modifying dataset_splits.csv itself
     -- that CSV is shared with ConjunctivaSegmentationDataset and
     AnemiaClassificationDataset, for which all 217 patients (including
-    the 15) remain perfectly valid; only this class's input data is
+    the 16) remain perfectly valid; only this class's input data is
     incomplete for them."""
 
     def __init__(
