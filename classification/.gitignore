@@ -3,3 +3,4 @@ data/processed/images/
 outputs/checkpoints/
 __pycache__/
 *.pyc
+*.zip

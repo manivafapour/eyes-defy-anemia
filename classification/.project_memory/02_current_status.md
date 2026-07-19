@@ -1,9 +1,9 @@
 # Current Status — classification/ (Phase 4)
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Where things stand
-This module was created from scratch this session as an intentionally isolated Phase 4 pipeline — no code or processed data imported from the root project's `scripts/`, `models/`, or `data/processed/`. Data preparation is complete and verified; the 6 training scripts are written and structurally sound; no actual training has been run yet.
+**Phase 4 training is complete.** This module was created from scratch as an intentionally isolated Phase 4 pipeline — no code or processed data imported from the root project's `scripts/`, `models/`, or `data/processed/`. Data preparation, the training engine, and the thesis-grade evaluation upgrade (confusion matrix/ROC/loss-history) were all built and verified locally, then all 6 (architecture, tissue_type) combinations were trained for real on Kaggle (12-trial Optuna search each) and results were pulled back and analyzed on 2026-07-19. See "Kaggle results" below for the full comparison.
 
 ## Two decisions resolved before any code was written
 1. **Hgb thresholds.** The initial ask specified country/gender-specific thresholds (India Women<12.0, Men<14.0; Italy flat<10.5, no gender split) framed as "dataset-specific clinical thresholds." These were checked against `Dataset anemia.docx` (extracted fresh from `archive.zip`) and found to have **no source in the dataset's own documentation** — the docx describes acquisition/segmentation methodology only, no Hgb cutoffs. The thresholds also would have widened the already-large India/Italy anemia-rate gap (§0.5 of the root `CLAUDE.md`), amplifying a confound this project treats as a serious risk. **Resolved: project author chose to use WHO thresholds instead** (Male<13.0, Female<12.0, same rule both countries — identical to the root project's Phase 0 rule). Note: an exact-duplicate resend of the original (rejected) thresholds arrived later in the session; this was flagged rather than silently actioned, and WHO thresholds were confirmed as the operative decision.
@@ -47,8 +47,30 @@ Structural verification (import checks + one dry forward pass per architecture/t
 ## Verification: local dry-run with the new logging/plotting (2026-07-18)
 Re-ran the same 1-trial/1-epoch dry-run pattern used for the original engine verification (`resnet18`/`palpebral`, `MAX_EPOCHS` monkey-patched to 1, not a permanent change). Zero exceptions. All 3 plot files were generated, confirmed to be valid non-corrupt PNGs (`PIL.Image.open` succeeded, correct format/dimensions), and **visually inspected** (not just file-existence-checked) — confusion matrix panel counts matched the JSON exactly, ROC curve rendered correctly with the AUC value matching the JSON, loss curve rendered the single epoch's train/val points correctly (will show a proper multi-point curve on a real 30-epoch Kaggle run). Dry-run artifacts (checkpoint, logs, plots, all prefixed `dryrun_`) were deleted afterward — not committed, consistent with the earlier dry-run's cleanup precedent.
 
+## False bug report, correctly declined (2026-07-19)
+A report claimed `dataset.py`'s image-loading line hardcoded a wrong `.jpg` extension and should be changed to `f"{patient_id}_{tissue_type}.png"`. Verified directly against both `dataset.py` (tissue type is already encoded as a subdirectory, `self.images_dir = Path(images_dir) / tissue_type`, so the plain `{patient_id}.jpg` lookup is correct) and `prepare_dataset.py` (saves to exactly that path). The proposed "fix" would have broken a working, already-tested code path — no file with a tissue-suffixed PNG name is ever produced by this pipeline; that naming pattern belongs to the *root* segmentation phase's `data/processed/masks/{patient_id}_palpebral.png`, a different, deliberately-separate pipeline. **No change was made.** Reinforces the standing rule: verify the actual file before applying a requested "fix," especially when it contradicts a design already tested end-to-end.
+
+## Kaggle results: all 6 combinations trained and analyzed (2026-07-19)
+Results were initially extracted from Kaggle into a doubly-nested `classification/classification/outputs/` path (an artifact of how the results zip was packaged), then moved into the canonical `classification/outputs/{checkpoints,logs,plots}/` location and the nested directory removed. `logs/` and `plots/` (12 + 18 files, all verified: JSONs parse, all 18 PNGs pass `Image.verify()`) are committed to GitHub as the official experimental record; `checkpoints/` (6 `.pth` files) stay local-only, per the project's large-binaries rule (`outputs/checkpoints/` is gitignored, same as every other phase). All 6 completed the full 12-trial Optuna search.
+
+| Architecture | Tissue | Val F1 | Val Acc | Val AUC | India AUC | Italy AUC | AUC gap |
+|---|---|---|---|---|---|---|---|
+| ResNet18 | palpebral | 0.848 | 0.848 | 0.835 | 0.600 | 0.967 | 0.367 |
+| MobileNetV3-Small | palpebral | 0.824 | 0.818 | 0.887 | 0.725 | 0.933 | 0.208 |
+| EfficientNet-B0 | palpebral | 0.848 | 0.848 | 0.850 | 0.700 | 0.917 | 0.217 |
+| ResNet18 | forniceal_palpebral | 0.737 | 0.677 | 0.744 | 0.450 | 0.923 | 0.473 |
+| MobileNetV3-Small | forniceal_palpebral | 0.765 | 0.742 | 0.782 | 0.725 | 0.885 | 0.160 |
+| **EfficientNet-B0** | **forniceal_palpebral** | **0.903** | **0.903** | **0.903** | 0.700 | 0.962 | 0.262 |
+
+**Best overall: EfficientNet-B0 / forniceal_palpebral.** F1=Acc=AUC=0.903, the only combo where all three headline metrics agree and clear the rest by a wide margin. Also the only combo where forniceal_palpebral beat its own palpebral counterpart (the other two architectures both did worse on forniceal_palpebral than palpebral). Loss curve (visually inspected) is healthy — train/val descend together, val loss stabilizes ~0.53-0.57 through early stopping at epoch 17, no divergence.
+
+**Best confound-handling: MobileNetV3-Small / forniceal_palpebral.** Smallest India/Italy AUC gap (0.160) of all 6, and the *only* combination that doesn't show a blanket recall=1.0 for the anemic class (it has one genuine false negative in India) — evidence it isn't just defaulting to "predict anemic."
+
+**Systematic pattern across all 6 models, not one architecture's quirk:** every model shows Italy AUC > India AUC, and 5 of 6 show recall=1.0. Most likely explanation: the `pos_weight` term in `BCEWithLogitsLoss` biases decisions toward "predict anemic," which plays out very differently against India's already-anemic-majority (10/14) val split vs. Italy's non-anemic-majority (15/19) one. **Clearest evidence of confound exploitation:** ResNet18/forniceal_palpebral pairs 78.6% India accuracy with a **sub-chance 0.450 India AUC** — good-looking accuracy from base rate, not real discrimination. Caveat: India's val subset is only 14 patients (4 non-anemic), so individual AUC values are noisy (a couple of misranked pairs move it ~0.1-0.15) — but the *direction* being consistent across 6 independently-tuned models is too systematic to dismiss as pure noise.
+
+**No single winner recommended.** EfficientNet-B0/forniceal_palpebral for raw performance, MobileNetV3-Small/forniceal_palpebral if the thesis wants to highlight confound-robustness — these disagree, and that disagreement is itself worth reporting rather than collapsing to one number.
+
 ## Immediate next step
-1. Project author pulls the latest commit into a Kaggle notebook.
-2. Run the 6 entry-point scripts on Kaggle (real 12-trial searches, real 30-epoch budgets with early stopping) — will now also produce `outputs/plots/{model_name}_{loss_curve,roc_curve,confusion_matrices}.png` for each model's best trial.
-3. Pull `classification/outputs/{checkpoints/best_*.pth, logs/*, plots/*}` back into this repo.
-4. Compare all 6 (architecture, tissue_type) combinations — both on aggregate metrics and, critically, on the per-country breakdown (a combination that's only good in aggregate because it's exploiting the country cue should be treated as a failure, not a win). The stratified confusion matrices are now the fastest way to eyeball this.
+1. Decide whether to report one "winning" model or both (best-overall vs. best-confound-handling) in the thesis — open question, not yet decided by the project author.
+2. Move real Kaggle logs/plots from `classification/classification/outputs/` into canonical `classification/outputs/{logs,plots}/` and commit as the official experimental record (checkpoints excluded, per the large-binaries rule) — not yet done, not yet requested.
+3. Any downstream integration with the root project (thesis writeup referencing both Phase 2 segmentation and Phase 4 classification results together) — still out of scope, still not decided.

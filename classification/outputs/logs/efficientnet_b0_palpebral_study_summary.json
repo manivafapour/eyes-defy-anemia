@@ -1,0 +1,145 @@
+{
+  "model_name": "efficientnet_b0_palpebral",
+  "n_trials_run": 12,
+  "best_trial_number": 4,
+  "best_val_f1": 0.8484848484848485,
+  "best_val_metrics_by_country": {
+    "overall": {
+      "n": 33,
+      "accuracy": 0.8484848484848485,
+      "precision": 0.7368421052631579,
+      "recall": 1.0,
+      "f1": 0.8484848484848485,
+      "confusion_matrix": [
+        [
+          14,
+          5
+        ],
+        [
+          0,
+          14
+        ]
+      ],
+      "auc": 0.849624060150376,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.0,
+          0.0,
+          0.10526315789473684,
+          0.10526315789473684,
+          0.15789473684210525,
+          0.15789473684210525,
+          0.21052631578947367,
+          0.21052631578947367,
+          0.2631578947368421,
+          0.2631578947368421,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.07142857142857142,
+          0.21428571428571427,
+          0.21428571428571427,
+          0.35714285714285715,
+          0.35714285714285715,
+          0.6428571428571429,
+          0.6428571428571429,
+          0.7142857142857143,
+          0.7142857142857143,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "India": {
+      "n": 14,
+      "accuracy": 0.8571428571428571,
+      "precision": 0.8333333333333334,
+      "recall": 1.0,
+      "f1": 0.9090909090909091,
+      "confusion_matrix": [
+        [
+          2,
+          2
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "auc": 0.7,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.0,
+          0.0,
+          0.25,
+          0.25,
+          0.5,
+          0.5,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.1,
+          0.2,
+          0.2,
+          0.6,
+          0.6,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "Italy": {
+      "n": 19,
+      "accuracy": 0.8421052631578947,
+      "precision": 0.5714285714285714,
+      "recall": 1.0,
+      "f1": 0.7272727272727273,
+      "confusion_matrix": [
+        [
+          12,
+          3
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "auc": 0.9166666666666667,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.0,
+          0.06666666666666667,
+          0.06666666666666667,
+          0.13333333333333333,
+          0.13333333333333333,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.25,
+          0.25,
+          0.5,
+          0.5,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  },
+  "best_params": {
+    "learning_rate": 0.006358358856676255,
+    "weight_decay": 0.000133112160807369
+  },
+  "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/outputs/checkpoints/best_efficientnet_b0_palpebral.pth",
+  "plot_paths": {
+    "loss_curve": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/efficientnet_b0_palpebral_loss_curve.png",
+    "confusion_matrices": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/efficientnet_b0_palpebral_confusion_matrices.png",
+    "roc_curve": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/efficientnet_b0_palpebral_roc_curve.png"
+  },
+  "timestamp_utc": "2026-07-19T13:13:16.918976+00:00"
+}

@@ -15,7 +15,7 @@ High-level, sequential plan for this module only. `[x]` = done and verified (not
 - [x] 6 thin entry-point scripts (3 architectures × 2 tissue types)
 - [x] Structural verification (import check + one dry forward pass per architecture/tissue combo, all 6 combos)
 - [x] End-to-end local dry-run (1 trial, 1 epoch, `train_resnet18_palpebral` config, run through the real `run_study()` path) — DataLoader, forward/backward, `BCEWithLogitsLoss`, and country-stratified metric computation/persistence all confirmed working with zero runtime errors. Dry-run artifacts (checkpoint/logs) deleted afterward, not committed.
-- [ ] Actual Optuna training runs (all 6) — not started; to be executed externally on Kaggle, not locally (GPU/time budget). Local dry-run cleared this repo for a Kaggle pull.
+- [x] Actual Optuna training runs (all 6) — **executed on Kaggle, results pulled back 2026-07-19.** All 6 completed the full 12-trial search. Results verified from `study_summary.json` for each + visual inspection of all plot types (not just the two spot-checked during local dry-run verification). See `02_current_status.md` for the full results table and analysis.
 
 ## Thesis-grade evaluation upgrade (implemented and verified 2026-07-18)
 - [x] Stratified confusion matrix (overall + India + Italy), computed every epoch, plotted as a 3-panel figure for the best trial only
@@ -26,7 +26,11 @@ High-level, sequential plan for this module only. `[x]` = done and verified (not
 - [x] Verified via a real end-to-end local dry-run (1 trial, 1 epoch, resnet18/palpebral): all 3 plots (loss curve, ROC curve, confusion matrices) generated correctly, visually inspected, matched the JSON data exactly. Dry-run artifacts deleted after verification, not committed.
 - Requested 2026-07-18, implemented and verified same day. See `02_current_status.md` for full detail.
 
-## Not yet started
-- [ ] Compare palpebral vs. forniceal_palpebral as classification input across all 3 architectures
-- [ ] Decide on a winning (architecture, tissue_type) combination
+## Kaggle results: comparison across all 6 combinations (2026-07-19)
+- [x] Compare palpebral vs. forniceal_palpebral as classification input across all 3 architectures — done, see `02_current_status.md` for the full table
+- [x] Identify best overall performer: **EfficientNet-B0 / forniceal_palpebral** (F1=Acc=AUC=0.903, only combo where all three headline metrics agree and clear the rest by a wide margin)
+- [x] Identify best confound-handling: **MobileNetV3-Small / forniceal_palpebral** (smallest India/Italy AUC gap, 0.160; the only combo without a blanket recall=1.0, i.e. not just defaulting to "predict anemic")
+- [x] **Systematic finding, not one model's quirk:** all 6 independently-tuned models show Italy AUC > India AUC, and 5 of 6 show recall=1.0 for the anemic class — consistent with the `pos_weight` loss term biasing toward "predict anemic," interacting differently with India's anemic-majority vs. Italy's non-anemic-majority val composition. ResNet18/forniceal_palpebral is the clearest case of likely confound exploitation: 78.6% India accuracy paired with a sub-chance 0.450 India AUC.
+- [ ] **Not yet decided:** which single (architecture, tissue_type) to carry forward as "the" Phase 4 result, if the thesis needs one — current recommendation is to report both winners (best-overall vs. best-confound-handling) rather than collapsing to one, since they disagree.
+- [x] Moved the real Kaggle logs/plots from the doubly-nested `classification/classification/outputs/` into the canonical `classification/outputs/{logs,plots}/` location, verified integrity (all JSONs parse, all 18 PNGs pass `Image.verify()`), and committed as the official experimental record. Checkpoints moved to `classification/outputs/checkpoints/` too but stay local-only (gitignored) per explicit instruction. Also added `*.zip` to `classification/.gitignore` after finding a 125MB leftover results zip with no ignore coverage.
 - [ ] Any downstream integration with the root project (e.g. whether a winning classifier eventually gets referenced from the thesis alongside the segmentation results) — out of scope for now, deliberately not decided yet
