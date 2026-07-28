@@ -1,3 +1,8 @@
+# Private research/source materials -- literature PDFs, internal research
+# summaries, and any other local-only documents. Never tracked, regardless
+# of what subfolder structure gets added under here later.
+Source/
+
 # Raw dataset archive
 archive.zip
 dataset anemia/
