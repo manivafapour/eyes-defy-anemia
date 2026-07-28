@@ -122,9 +122,17 @@ class TissueClassificationDataset(Dataset):
 # --------------------------------------------------------------------------
 # DataLoaders
 # --------------------------------------------------------------------------
-def get_dataloaders(tissue_type: str, batch_size: int = BATCH_SIZE, num_workers: int = 0) -> dict:
-    train_tf = get_train_transforms()
-    eval_tf = get_eval_transforms()
+def get_dataloaders(
+    tissue_type: str, batch_size: int = BATCH_SIZE, num_workers: int = 0, image_size: int = IMAGE_SIZE
+) -> dict:
+    """image_size defaults to the CNN-era 256 constant, but transformer
+    architectures (ViT/Swin) are resolution-locked to their pretrained
+    patch grid (224) via position embeddings -- callers targeting those
+    must pass image_size=224 explicitly. CNNs stay resolution-flexible
+    (global/adaptive pooling before the classifier), so 256 remains valid
+    for them and is unaffected by this parameter's default."""
+    train_tf = get_train_transforms(image_size)
+    eval_tf = get_eval_transforms(image_size)
 
     datasets = {
         "train": TissueClassificationDataset(split="train", tissue_type=tissue_type, transform=train_tf),

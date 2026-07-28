@@ -1,8 +1,77 @@
 # Current Status — classification/ (Phase 4)
 
-Last updated: 2026-07-19
+Last updated: 2026-07-28
 
-## Where things stand
+## IN PROGRESS: Phase 4 expansion (v2) — 9 architectures, 18 combos
+Full checklist in `01_roadmap.md`. This section is the detailed working record; kept up to date at every implementation step per explicit project-author instruction (2026-07-28: "as you implement these steps, you must simultaneously update the project memory files").
+
+**Why this started:** thesis-comprehensiveness concern — 3 classification models risked being seen as a thin evaluation. Plan: add 3 new CNNs + 3 transformers (lightweight/medium/heavy), and standardize training protocol across all 9 (not just the 6 new ones) so the final table is one clean, fair comparison.
+
+**Finding that shaped the whole plan:** reviewing the original 3 models' actual classifier code (not just the results table) found ResNet18 had zero head-level dropout while MobileNetV3-Small and EfficientNet-B0 each shipped a hardcoded, untuned `p=0.2` (verified by inspecting `model.classifier`/`model.fc` directly on all 9 candidate architectures with `weights=None`, not assumed). This is a real, previously-unnoticed inconsistency in the original 6-combo comparison — ResNet18 (the weakest original performer, worst confound exploitation) trained with strictly less regularization than the other two. Directly motivated making `dropout_rate` a searched Optuna hyperparameter across all 9 architectures uniformly, rather than patching only the 6 new ones.
+
+**Architecture selection (all confirmed available in the installed `torchvision 0.28.0`, zero new dependencies):**
+
+| Role | Model | Params | ImageNet Top-1 | Input res |
+|---|---|---|---|---|
+| New CNN | DenseNet121 | 7.98M | 74.4% | 256 |
+| New CNN | ConvNeXt-Tiny | 28.59M | 82.5% | 256 |
+| New CNN | RegNetY-400MF | 4.34M | 74.0% | 256 |
+| Transformer (light) | Swin-Tiny | 28.29M | 81.5% | 224 |
+| Transformer (medium) | ViT-B/16 | 86.57M | 81.1% | 224 |
+| Transformer (heavy) | ViT-L/16 | 304.33M | 85.1%* | 224 |
+
+*ViT-L/16 uses `IMAGENET1K_SWAG_LINEAR_V1` weights, not the default `IMAGENET1K_V1` — verified the default actually scores lower (79.7%) than ViT-B/16 (81.1%), a known ViT-L-undertrained-on-ImageNet-1K-alone quirk. SWAG_LINEAR_V1 is a strictly better frozen feature extractor and still uses 224×224, so it doesn't disturb the shared transformer preprocessing size.
+
+**Decisions confirmed by the project author (2026-07-28):**
+1. Both tissue types (`palpebral` + `forniceal_palpebral`) for all 9 architectures → 18 total (architecture, tissue_type) combos, matching the original methodology exactly rather than narrowing scope.
+2. torchvision-native models only — no `timm` dependency added.
+3. `MAX_EPOCHS` 30→100, relying on early stopping (`EARLY_STOPPING_PATIENCE` 5→7, raised specifically because dropout=0.5 trials add real epoch-to-epoch val-loss noise that could trip a tighter patience prematurely) rather than a hard epoch cap.
+4. `dropout_rate` added as a 3rd Optuna-tuned categorical hyperparameter (`{0.2, 0.5}`), alongside the existing `learning_rate`/`weight_decay`. Structurally identical in shape to the segmentation phase's precedent for adding a 3rd tuned categorical dimension (`loss_fn`, `CLAUDE.md` §3.4) — `n_trials=12` stays valid on that same reasoning, no increase needed for dimensionality alone.
+5. Retrain all 9 architectures (not just the 6 new ones) under the unified v2 protocol, so the final comparison table is apples-to-apples. The original 6 logs/checkpoints stay on disk as a superseded v1 baseline — not deleted, not overwritten.
+
+**Implementation so far:**
+- `trainer_engine.py`: `ARCHITECTURE_REGISTRY` restructured `name -> build_fn` → `name -> {build_fn, input_size}`, extended to all 9 architectures. Every builder now accepts `dropout_rate` and threads it into a `Dropout -> Linear` head — for MobileNetV3-Small/EfficientNet-B0 this overwrites the pre-existing fixed-0.2 module's `.p` in place (so Optuna actually controls it) rather than stacking a second dropout on top; the other 7 get a freshly-inserted one. `MAX_EPOCHS=100`, `EARLY_STOPPING_PATIENCE=7`. `make_objective()`'s `objective()` samples `dropout_rate`, looks up each architecture's `input_size` from the registry, and passes it into `get_dataloaders()`.
+- `dataset.py`: `get_dataloaders()` gained an `image_size` parameter (default unchanged at 256, so old callers are unaffected); passes through to the already-parametrized `get_train_transforms()`/`get_eval_transforms()`.
+- **Structural verification (real, not just written):** built all 9 architectures × both dropout rates (0.2, 0.5), ran a forward pass at each architecture's registered resolution, asserted output shape `(B, 1)`, and asserted the sampled `dropout_rate` value is actually present in the model's live `Dropout` module (catches the failure mode where an override silently doesn't take effect). Zero errors, exit code 0, printed summary "All 9 architectures x 2 dropout rates: OK".
+- **New directory `classification/v2_scripts/`** — 18 entry-point scripts (`train_{arch}_{tissue}_v2.py`), generated programmatically from a template (not hand-copy-pasted, to avoid the 18-file transcription-error risk) and spot-checked by reading two of them in full (`resnet18_palpebral_v2` — has a v1 baseline note; `vit_l_16_forniceal_palpebral_v2` — no-v1-baseline note, since that architecture is brand new). `model_name` for every script carries the `_v2` suffix (e.g. `resnet18_palpebral_v2`), so no v2 run can ever collide with a v1 checkpoint/log filename.
+- **Import path verified working, not just visually correct:** each `v2_scripts/*.py` computes `SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"` to reach `trainer_engine.py` in the sibling `scripts/` directory (since it's no longer next to it) — confirmed by actually importing `run_study`/`ARCHITECTURE_REGISTRY` through that exact path construction from a `v2_scripts`-relative script path, not by inspection alone.
+- **Live hazard flagged and now contained:** the original 6 entry-point scripts in `classification/scripts/` (`train_resnet18_palpebral.py` etc.) still exist, unedited, still pointing at the old un-suffixed `model_name`s. Since `trainer_engine.py` is shared, re-running any of those 6 as-is would now execute the *new* v2 protocol (100 epochs, dropout tuning) but silently overwrite the *old* v1 checkpoint/logs under the same name. They must be treated as retired/do-not-rerun going forward — the 18 new `v2_scripts/` entries are the only scripts that should be run for any future Phase 4 classification training.
+
+**Local dry-run verification (2026-07-28) — passed, zero errors.** Same pattern as the original engine's dry-run precedent: `MAX_EPOCHS` monkey-patched to 1 on the imported module object (temporary, not a code change), `n_trials=1`, model names prefixed `dryrun_`. Ran the real `run_study()` path (not a manual/isolated call) for two combos chosen specifically because neither had ever been exercised through an actual training loop before (only structural forward-pass checks) and because together they cover both resolution branches:
+- **DenseNet121 / palpebral** (new CNN, 256×256) — `val_f1=0.5778` after 1 epoch.
+- **Swin-T / palpebral** (new transformer, 224×224) — `val_f1=0.6047` after 1 epoch.
+
+What was actually verified, not just assumed:
+1. **Dynamic resolution scaling** — checked directly on a real batch tensor (not inferred): `get_dataloaders(..., image_size=256)` produced `(16, 3, 256, 256)` for DenseNet121, `get_dataloaders(..., image_size=224)` produced `(16, 3, 224, 224)` for Swin-T, both matching `ARCHITECTURE_REGISTRY[arch]["input_size"]` exactly.
+2. **`dropout_rate` as a real Optuna dimension** — both trials' `trial.params` contained `dropout_rate` (`0.2` in both cases) alongside `learning_rate`/`weight_decay`, confirmed by assertion, not just printed. (Both trials also landed identical `learning_rate`/`weight_decay`/`dropout_rate` values — expected, not a bug: `TPESampler(seed=42)` deterministically samples trial 0 the same way on any freshly-created study with no prior trial history to condition on. Real 12-trial studies will diverge normally from trial 1 onward as TPE builds up history.)
+3. **Full training loop** — forward/backward through the frozen-backbone + Dropout+Linear head, `AdamW` optimizer step, `BCEWithLogitsLoss` with `pos_weight`, per-country (India/Italy) stratified metrics including confusion matrix and ROC curve computed correctly on small per-country val slices (14 India, 19 Italy) with no crashes, checkpoint save, `_trials.csv` + `_study_summary.json` + all 3 plots generated correctly for both combos.
+4. **Runtime** — both trials combined finished in ~7 seconds on the local RTX 4050, confirming this dry-run pattern is cheap enough to repeat for other architectures later if ever needed.
+
+**Important caveat, recorded so it isn't mistaken for a real result later:** the `val_f1` values above (0.58, 0.60) are **not meaningful performance numbers** — a single epoch on a frozen backbone with an untrained, near-randomly-initialized head is expected to perform close to arbitrarily. This dry run verified the pipeline's plumbing only, not architecture quality; real signal only comes from the actual 12-trial/100-epoch-ceiling Kaggle runs. Dry-run artifacts (2 checkpoints, 4 log files, 6 plots, all `dryrun_`-prefixed) were deleted after verification — confirmed untracked via `git status` first, not committed, per the same convention as every prior dry run in this project.
+
+## Metrics and plots enrichment (2026-07-28)
+Project author requested richer thesis evaluation on top of the "exact same metrics as the original 6" requirement: "Feel free to add even more metrics (e.g., Sensitivity/Recall, Specificity, etc.)" and "comprehensive plots... Loss curves, Sensitivity/Recall charts, ROC curves, and anything else you think would be valuable."
+
+**Metrics (`compute_metrics()`/`_safe_metrics()` in `trainer_engine.py`):**
+- Added `sensitivity` (a literal alias of `recall` — they are the same quantity for the positive/anemic class in binary classification; kept as a separate key rather than renaming `recall` so both the original terminology and the clinical term are directly available without breaking comparability with the original 6 JSONs' key names).
+- Added `specificity` = `TN / (TN + FP)`, computed straight from the confusion matrix (sklearn has no direct function for it, unlike recall/precision/f1). Returns `None` (not `0.0`) when a slice has zero true negatives, so an undefined value is never silently misread as "zero specificity."
+- Added `balanced_accuracy` = `(sensitivity + specificity) / 2`, `None` when specificity is undefined.
+- All three are computed for **all three buckets** (overall/India/Italy) uniformly, same as every other metric in this function — strengthens the per-country confound analysis, not just the overall numbers.
+- **Every original key preserved unchanged**: `accuracy`, `precision`, `recall`, `f1`, `auc`, `confusion_matrix`, `roc_curve` — verified by direct inspection of the diff, not just claimed. This is what makes the "exact same metrics, perfect apples-to-apples" requirement true by construction rather than by promise.
+
+**Plots (`trainer_engine.py`):**
+- New `{model_name}_val_metrics_curve.png` — validation accuracy/F1/sensitivity/specificity plotted together over epochs (overall bucket). Chosen specifically because sensitivity+specificity together are the direct visual signal for this project's known "blanket-predict-anemic" collapse mode (sensitivity→1, specificity→0) — more informative side by side than either metric alone or than accuracy/F1 alone.
+- `_plot_roc_curve` (single-panel, overall-only) replaced with `_plot_roc_curves` (3-panel: overall/India/Italy, mirroring `_plot_confusion_matrices`'s existing layout) — output file renamed `{model_name}_roc_curves.png`. Per-country ROC data was already being computed before (§ original engine's docstring) but deliberately not plotted, since only the confusion matrix was explicitly requested stratified at the time; now that "comprehensive plots" and "especially per-country India/Italy analysis" were both explicitly requested together, plotting it too was the natural extension rather than leaving it as unused JSON data.
+- `train_loss_history`/`val_loss_history` tracking (already existed) joined by a new `val_overall_metrics_history` (per-epoch accuracy/f1/sensitivity/specificity for the overall bucket), stashed via `trial.set_user_attr()` exactly like the loss histories, and consumed by `_save_outputs()` for the best trial only — same "plots only from the single best trial, never per-trial" constraint as everything else in this file.
+
+**Verified via a dedicated 1-trial/1-epoch dry run** (`resnet18_palpebral`, chosen because it's the cheapest, most already-tested architecture — this check is about the new metrics/plotting code, not architecture coverage, which was already verified separately): confirmed `sensitivity == recall` exactly, `specificity`/`balanced_accuracy` computed correctly — and usefully, this particular dry-run trial actually landed in the known predict-everyone-anemic collapse mode (`sensitivity=1.0, specificity=0.0, balanced_accuracy=0.5`), a real (not synthetic) confirmation that the new metrics correctly capture that exact failure mode. All 4 expected plot files (`loss_curve`, `confusion_matrices`, `val_metrics_curve`, `roc_curves`) generated and confirmed to exist on disk via assertion, not just printed. Dry-run artifacts deleted afterward (confirmed untracked via `git status` first), same convention as every prior dry run.
+
+## Decision: Kaggle pilot test skipped (2026-07-28)
+Project author explicitly chose to skip piloting 1-2 real trials on Kaggle to gauge per-trial wall-clock cost before committing to the full sweep (this had been the recommended next step). Going straight to the full 18-combo × 12-trial sweep instead; any issues that surface during real runs will be reported and fixed reactively rather than pre-empted. Recorded here so it's clear this was a deliberate scope decision, not an oversight, if a run turns out to blow past a reasonable time/quota budget later.
+
+**Not yet done:** git push of all v2 changes to GitHub (in progress); any real Kaggle training under the v2 protocol; the expanded 18-combo comparison analysis.
+
+## Where things stand (original 6-combo run, historical — still accurate for that scope)
 **Phase 4 training is complete.** This module was created from scratch as an intentionally isolated Phase 4 pipeline — no code or processed data imported from the root project's `scripts/`, `models/`, or `data/processed/`. Data preparation, the training engine, and the thesis-grade evaluation upgrade (confusion matrix/ROC/loss-history) were all built and verified locally, then all 6 (architecture, tissue_type) combinations were trained for real on Kaggle (12-trial Optuna search each) and results were pulled back and analyzed on 2026-07-19. See "Kaggle results" below for the full comparison.
 
 ## Two decisions resolved before any code was written
