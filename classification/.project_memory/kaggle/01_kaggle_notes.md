@@ -43,6 +43,22 @@ Kaggle GPU session/quota limits are real but not something this session has prec
 
 Status as of this entry: batch 1's 14 combos have been queued into the Kaggle notebook (exact scripts recorded in `01_roadmap.md`/`02_current_status.md`) but **not yet confirmed complete** — this file will be updated once real results are pulled back.
 
+## Notebook fix: explicit, robust output persistence (2026-07-28)
+
+Project author reported the notebook "does not save output artifacts properly." Diagnosis: it isn't strictly true that nothing gets saved — `trainer_engine.py`'s `CHECKPOINTS_DIR`/`LOGS_DIR`/`PLOTS_DIR` already resolve to `classification/outputs/{checkpoints,logs,plots}/` relative to wherever the repo is cloned, i.e. `/kaggle/working/eyes-defy-anemia/classification/outputs/` on Kaggle — which *is* under `/kaggle/working/` and *should* get captured by Kaggle's own "Save Version" snapshot mechanism. But two real, concrete problems existed even so:
+
+1. **No single, obvious, top-level download location** — results were nested 3 directories deep (`eyes-defy-anemia/classification/outputs/...`), not at `/kaggle/working/` itself, making them easy to miss or tedious to collect by hand across 14 combos.
+2. **No robustness to a mid-run interruption.** If the run got cut short partway through the 14 queued combos (a real possibility already flagged in this file, given no pilot test was run), whatever completed so far would still exist on disk but with no single consolidated, downloadable snapshot reflecting exactly what had finished.
+
+**Fix applied to `classification/Kaggle-Notebook/classification-final-fixed.ipynb`:** added a `sync_outputs()` helper (defined once, right after the "## Training" header) that copies `classification/outputs/{checkpoints,logs,plots}/` into a clean top-level `/kaggle/working/outputs/` and zips it to `/kaggle/working/batch1_results.zip`. Critically, **`sync_outputs()` is called after every one of the 14 training cells, not just once at the end** — so a mid-run interruption still leaves a complete, correctly up-to-date consolidated snapshot of whatever finished, not nothing. A final summary cell prints the consolidated directory's contents and the zip's size once the notebook completes.
+
+**Verified before considering this done, not just written:**
+- `nbformat.validate()` passed (strict schema check) after patching, same standard as the original notebook generation.
+- Confirmed `shutil.make_archive` doesn't crash on an empty source directory (the very first no-op `sync_outputs()` call, right after its own definition, runs before any training has produced anything) — tested directly, produces a valid empty zip rather than raising.
+- Full end-to-end simulation with real files (fake checkpoint + fake log JSON) confirmed the copy+zip logic produces a correct archive with the expected internal paths (`checkpoints/...`, `logs/...`), not just checked in the abstract.
+
+Total cell count: 24 -> 27 (1 new helper-definition cell, 14 existing training cells each gained one appended `sync_outputs()` line, 2 new cells at the end).
+
 ## Notebook review (`classificatio-final.ipynb`, before batch 1 was launched, 2026-07-28)
 
 Reviewed the actual saved Kaggle notebook (cells 0-7) against the specified recipe before the project author hit Save & Run All. Two real findings:
