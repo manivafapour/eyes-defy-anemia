@@ -1,6 +1,44 @@
 # Current Status — classification/ (Phase 4)
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
+
+## Batch 1 complete: 14 combos downloaded, extracted, verified (2026-07-29)
+`batch1_results.zip` downloaded from Kaggle and placed in `classification/outputs/`. Full replacement of the old v1 results performed:
+
+- Deleted the 6 known v1 checkpoints (gitignored, no git safety net — genuinely gone from local disk now, though the original Kaggle run that produced them is long since finished and not re-derivable except by retraining under the old, no-longer-current v1 protocol) and all old logs/plots (git-tracked, recoverable from history if ever needed).
+- **Finding, not assumed:** `batch1_results.zip` itself contained more than the 14 new v2 combos — its `logs/`/`plots/` also carried the 6 old v1-named entries as unchanged "passengers," because the Kaggle notebook's `sync_outputs()` copies whatever is under `classification/outputs/` at call time, and the v1 logs/plots were already sitting there from the git clone (they're tracked; v1 checkpoints aren't, which is why `checkpoints/` in the zip had exactly 14 files with no v1 passengers). After extracting, explicitly removed the 6 v1-named files from `logs/`/`plots/` (identified by absence of `_v2` in the filename, not a hardcoded list) so only the 14 v2 results remain — otherwise the "completely replace" goal wouldn't have been fully achieved for those two directories.
+- Verified, not just listed: 14 checkpoints, 28 logs (14×2), 56 plots (14×4), combo names cross-checked identical between `checkpoints/` and `logs/`, and all 14 `study_summary.json` files parsed as valid JSON with sane `best_val_f1` values (range 0.765–0.933).
+- `checkpoints/model_weigh.rar` (125MB, unrecognized, flagged before touching it) — **resolved**: project author confirmed it's an old personal archive, unrelated, already manually deleted. No further action needed.
+
+**Batch 1 results preview (val F1, real numbers from the downloaded JSONs — not yet the full sensitivity/specificity/balanced_accuracy/per-country analysis, which is deliberately paused until batch 2 lands):**
+
+| Rank | Model | Val F1 |
+|---|---|---|
+| 1 | EfficientNet-B0 / forniceal_palpebral | 0.933 |
+| 2 | ConvNeXt-Tiny / palpebral | 0.903 |
+| 3 | EfficientNet-B0 / palpebral | 0.897 |
+| 4 | RegNetY-400MF / forniceal_palpebral | 0.875 |
+| 4 | RegNetY-400MF / palpebral | 0.875 |
+| 6 | MobileNetV3-Small / palpebral | 0.839 |
+| 7 | DenseNet121 / forniceal_palpebral | 0.815 |
+| 8 | DenseNet121 / palpebral | 0.813 |
+| 8 | ResNet18 / palpebral | 0.813 |
+| 8 | Swin-Tiny / palpebral | 0.813 |
+| 11 | Swin-Tiny / forniceal_palpebral | 0.800 |
+| 12 | ConvNeXt-Tiny / forniceal_palpebral | 0.788 |
+| 13 | MobileNetV3-Small / forniceal_palpebral | 0.778 |
+| 14 | ResNet18 / forniceal_palpebral | 0.765 |
+
+**Decision: full analysis deliberately paused** (project author, 2026-07-29) until batch 2 (ViT-B/16, ViT-L/16) completes too, so all 18 combos get analyzed together in one pass rather than twice.
+
+## Batch 2: dedicated notebook created (2026-07-29)
+New, standalone notebook: `classification/Kaggle-Notebook/classification-batch2.ipynb` — not a modification of the batch-1 notebook. Built by transforming (not hand-copying) the already-verified `classification-final-fixed.ipynb`: reuses its Setup/Data section cells verbatim (GPU check, idempotent clone, dataset-path copy, dependency install, dataloader sanity check — all already tested working on real Kaggle infrastructure for batch 1), replaces the 14 training cells with exactly 4 (`vit_b_16` then `vit_l_16`, each × palpebral/forniceal_palpebral — cheapest-of-the-remaining-two first, same principle as batch 1's ordering), and retargets `sync_outputs()` at `batch2_results.zip` instead of `batch1_results.zip` so the two batches' downloads never collide.
+
+`sync_outputs()` is called after every one of the 4 training cells, same robustness reasoning as batch 1 — these are the 2 heaviest architectures in the entire 9-architecture roster (86.6M / 304.3M params), so a mid-run interruption is a real risk worth protecting against.
+
+**Verified before calling it done:** caught and fixed one real bug during generation — the notebook-transformation script initially carried over the old "## Training -- Batch 1" markdown header by mistake (an off-by-one in the cell-slice boundary), caught by inspecting the full cell list before declaring it finished, not just trusting the generator ran without error. Re-verified after the fix: `nbformat.validate()` passed, all 17 cells inspected individually (title, setup, data, `sync_outputs` definition retargeted correctly, all 4 training cells reference the correct scripts and append `sync_outputs()`, final summary cell references the correct zip name), and all 4 referenced `classification/v2_scripts/train_{vit_b_16,vit_l_16}_{palpebral,forniceal_palpebral}_v2.py` scripts confirmed to actually exist on disk before considering the notebook ready.
+
+**Not yet done:** batch 2 hasn't been run on Kaggle yet.
 
 ## IN PROGRESS: Phase 4 expansion (v2) — 9 architectures, 18 combos
 Full checklist in `01_roadmap.md`. This section is the detailed working record; kept up to date at every implementation step per explicit project-author instruction (2026-07-28: "as you implement these steps, you must simultaneously update the project memory files").

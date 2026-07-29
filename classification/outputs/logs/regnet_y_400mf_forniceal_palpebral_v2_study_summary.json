@@ -1,0 +1,134 @@
+{
+  "model_name": "regnet_y_400mf_forniceal_palpebral_v2",
+  "n_trials_run": 12,
+  "best_trial_number": 6,
+  "best_val_f1": 0.875,
+  "best_val_metrics_by_country": {
+    "overall": {
+      "n": 31,
+      "accuracy": 0.8709677419354839,
+      "precision": 0.7777777777777778,
+      "recall": 1.0,
+      "sensitivity": 1.0,
+      "specificity": 0.7647058823529411,
+      "balanced_accuracy": 0.8823529411764706,
+      "f1": 0.875,
+      "confusion_matrix": [
+        [
+          13,
+          4
+        ],
+        [
+          0,
+          14
+        ]
+      ],
+      "auc": 0.8739495798319328,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.0,
+          0.0,
+          0.17647058823529413,
+          0.17647058823529413,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.07142857142857142,
+          0.2857142857142857,
+          0.2857142857142857,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "India": {
+      "n": 14,
+      "accuracy": 0.8571428571428571,
+      "precision": 0.8333333333333334,
+      "recall": 1.0,
+      "sensitivity": 1.0,
+      "specificity": 0.5,
+      "balanced_accuracy": 0.75,
+      "f1": 0.9090909090909091,
+      "confusion_matrix": [
+        [
+          2,
+          2
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "auc": 0.7,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.0,
+          0.0,
+          0.5,
+          0.5,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.1,
+          0.4,
+          0.4,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "Italy": {
+      "n": 17,
+      "accuracy": 0.8823529411764706,
+      "precision": 0.6666666666666666,
+      "recall": 1.0,
+      "sensitivity": 1.0,
+      "specificity": 0.8461538461538461,
+      "balanced_accuracy": 0.9230769230769231,
+      "f1": 0.8,
+      "confusion_matrix": [
+        [
+          11,
+          2
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "auc": 0.9230769230769231,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.07692307692307693,
+          0.07692307692307693,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  },
+  "best_params": {
+    "learning_rate": 0.0023345864076016252,
+    "weight_decay": 0.0002267398652378039,
+    "dropout_rate": 0.5
+  },
+  "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/outputs/checkpoints/best_regnet_y_400mf_forniceal_palpebral_v2.pth",
+  "plot_paths": {
+    "loss_curve": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/regnet_y_400mf_forniceal_palpebral_v2_loss_curve.png",
+    "confusion_matrices": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/regnet_y_400mf_forniceal_palpebral_v2_confusion_matrices.png",
+    "val_metrics_curve": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/regnet_y_400mf_forniceal_palpebral_v2_val_metrics_curve.png",
+    "roc_curves": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/regnet_y_400mf_forniceal_palpebral_v2_roc_curves.png"
+  },
+  "timestamp_utc": "2026-07-29T10:23:14.433069+00:00"
+}

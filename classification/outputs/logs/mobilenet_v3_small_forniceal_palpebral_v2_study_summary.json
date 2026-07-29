@@ -1,0 +1,160 @@
+{
+  "model_name": "mobilenet_v3_small_forniceal_palpebral_v2",
+  "n_trials_run": 12,
+  "best_trial_number": 6,
+  "best_val_f1": 0.7777777777777778,
+  "best_val_metrics_by_country": {
+    "overall": {
+      "n": 31,
+      "accuracy": 0.7419354838709677,
+      "precision": 0.6363636363636364,
+      "recall": 1.0,
+      "sensitivity": 1.0,
+      "specificity": 0.5294117647058824,
+      "balanced_accuracy": 0.7647058823529411,
+      "f1": 0.7777777777777778,
+      "confusion_matrix": [
+        [
+          9,
+          8
+        ],
+        [
+          0,
+          14
+        ]
+      ],
+      "auc": 0.8151260504201681,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.058823529411764705,
+          0.058823529411764705,
+          0.11764705882352941,
+          0.11764705882352941,
+          0.23529411764705882,
+          0.23529411764705882,
+          0.35294117647058826,
+          0.35294117647058826,
+          0.4117647058823529,
+          0.4117647058823529,
+          0.47058823529411764,
+          0.47058823529411764,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.0,
+          0.21428571428571427,
+          0.21428571428571427,
+          0.6428571428571429,
+          0.6428571428571429,
+          0.7857142857142857,
+          0.7857142857142857,
+          0.8571428571428571,
+          0.8571428571428571,
+          0.9285714285714286,
+          0.9285714285714286,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "India": {
+      "n": 14,
+      "accuracy": 0.7142857142857143,
+      "precision": 0.7142857142857143,
+      "recall": 1.0,
+      "sensitivity": 1.0,
+      "specificity": 0.0,
+      "balanced_accuracy": 0.5,
+      "f1": 0.8333333333333334,
+      "confusion_matrix": [
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "auc": 0.7,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.0,
+          0.0,
+          0.5,
+          0.5,
+          0.75,
+          0.75,
+          1.0,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.1,
+          0.6,
+          0.6,
+          0.7,
+          0.7,
+          0.9,
+          0.9,
+          1.0
+        ]
+      }
+    },
+    "Italy": {
+      "n": 17,
+      "accuracy": 0.7647058823529411,
+      "precision": 0.5,
+      "recall": 1.0,
+      "sensitivity": 1.0,
+      "specificity": 0.6923076923076923,
+      "balanced_accuracy": 0.8461538461538461,
+      "f1": 0.6666666666666666,
+      "confusion_matrix": [
+        [
+          9,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "auc": 0.8653846153846154,
+      "roc_curve": {
+        "fpr": [
+          0.0,
+          0.07692307692307693,
+          0.07692307692307693,
+          0.15384615384615385,
+          0.15384615384615385,
+          1.0
+        ],
+        "tpr": [
+          0.0,
+          0.0,
+          0.25,
+          0.25,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  },
+  "best_params": {
+    "learning_rate": 0.0023345864076016252,
+    "weight_decay": 0.0002267398652378039,
+    "dropout_rate": 0.5
+  },
+  "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/outputs/checkpoints/best_mobilenet_v3_small_forniceal_palpebral_v2.pth",
+  "plot_paths": {
+    "loss_curve": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/mobilenet_v3_small_forniceal_palpebral_v2_loss_curve.png",
+    "confusion_matrices": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/mobilenet_v3_small_forniceal_palpebral_v2_confusion_matrices.png",
+    "val_metrics_curve": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/mobilenet_v3_small_forniceal_palpebral_v2_val_metrics_curve.png",
+    "roc_curves": "/kaggle/working/eyes-defy-anemia/classification/outputs/plots/mobilenet_v3_small_forniceal_palpebral_v2_roc_curves.png"
+  },
+  "timestamp_utc": "2026-07-29T10:29:36.467647+00:00"
+}
