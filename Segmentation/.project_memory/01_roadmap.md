@@ -43,3 +43,6 @@ High-level, sequential plan for the whole project. `[x]` = done and verified (no
 ## Final Deliverables
 - [ ] Consolidated results/comparison across all segmentation + classification models
 - [ ] Thesis writeup (`CLAUDE.md` is the running, cite-able methodology reference)
+
+## Repository organization
+- [x] Moved the whole segmentation-phase tree into a dedicated `Segmentation/` top-level folder (2026-07-29), sibling to `classification/`, for a clean repo structure. `CLAUDE.md` stays at the repo root (reasoning in `03_tech_stack_and_rules.md`) but all its internal paths were updated. Full detail in `02_current_status.md`.

@@ -3,24 +3,36 @@
 # of what subfolder structure gets added under here later.
 Source/
 
+# --------------------------------------------------------------------------
+# Segmentation/ (root/segmentation phase, moved into its own top-level
+# folder 2026-07-29). Patterns below are anchored to wherever this
+# .gitignore file lives (git treats any pattern containing a "/" in the
+# middle as anchored to the .gitignore's own directory, not matched at any
+# depth) -- so they need the Segmentation/ prefix explicitly, or the
+# large binaries they're meant to exclude would silently become
+# trackable again after the move. Single-segment patterns (no "/" in the
+# middle, e.g. archive.zip, venv/, __pycache__/) match at any depth
+# regardless and did not need changing.
+# --------------------------------------------------------------------------
+
 # Raw dataset archive
 archive.zip
 dataset anemia/
 
 # Processed image/mask outputs (large binaries, regenerable from archive.zip)
-data/processed/images/
-data/processed/masks/
+Segmentation/data/processed/images/
+Segmentation/data/processed/masks/
 
 # Raw-photo-aligned image/mask outputs (large binaries, regenerable via
-# scripts/build_aligned_dataset.py; alignment_log.csv is NOT ignored --
-# it's small and worth keeping in version control)
-data/processed/aligned_raw/images/
-data/processed/aligned_raw/masks/
+# Segmentation/scripts/build_aligned_dataset.py; alignment_log.csv is NOT
+# ignored -- it's small and worth keeping in version control)
+Segmentation/data/processed/aligned_raw/images/
+Segmentation/data/processed/aligned_raw/masks/
 
 # Orphaned local output from the abandoned Phase 3 crop-based approach
 # (its generating scripts were deleted; this directory is stale disk
 # clutter, kept ignored purely so it can't be accidentally committed)
-data/cropped/
+Segmentation/data/cropped/
 
 # Python virtual environment
 venv/
@@ -29,13 +41,15 @@ venv/
 __pycache__/
 *.pyc
 
-# Local backups / Kaggle upload-prep artifacts
+# Local backups / Kaggle upload-prep artifacts (left at repo root, not
+# moved into Segmentation/ -- they're stale pre-reorg directory snapshots)
 clean_map.txt
 folder_map.txt
 folder_map_utf8.txt
-data/processed/eyes_processed_data.zip
+Segmentation/data/processed/eyes_processed_data.zip
+Segmentation/data/processed/aligned_raw.zip
 
 # Trained model checkpoints (large binaries, regenerable by retraining;
 # outputs/logs/ metrics CSV/JSON are NOT ignored -- those are small and
 # worth keeping in version control)
-outputs/checkpoints/
+Segmentation/outputs/checkpoints/

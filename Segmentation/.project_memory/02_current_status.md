@@ -1,6 +1,16 @@
 # Current Status — EYES-DEFY-ANEMIA
 
-Last updated: 2026-07-18
+Last updated: 2026-07-29
+
+## Repository reorganization: moved into `Segmentation/` (2026-07-29)
+Project author requested a clean top-level repo structure ahead of anyone cloning from GitHub — this entire segmentation-phase tree (`scripts/`, `models/`, `data/`, `outputs/`, `notebooks/`, `archive.zip`, `my_valuable_outputs.zip`, and this `.project_memory/` folder) moved from the repo root into a new `Segmentation/` folder, sitting alongside the sibling `classification/` module. `CLAUDE.md` deliberately stayed at the repo root (full reasoning in `03_tech_stack_and_rules.md`'s Directory Structure section) but had every internal path reference and its session-start instruction updated to the new `Segmentation/...` paths.
+
+**Verified safe, not just moved and hoped:**
+- Every script's path config uses `Path(__file__).resolve().parent[.parent]`, confirmed via grep across all of `scripts/` before moving — zero `cwd`-relative or hardcoded-absolute-path risk, so no code changes were needed for the pipeline itself to keep working.
+- `models/segmentation/*.py` confirmed to have no path-handling code at all (pure model definitions) — zero risk.
+- Root `.gitignore`'s anchored patterns (any pattern with a `/` in the middle, e.g. `data/processed/images/`, `outputs/checkpoints/`) were updated with the `Segmentation/` prefix — git anchors these to the `.gitignore` file's own directory, so without this fix the same large binaries would have silently become trackable again. Verified with `git status --ignored` before and after that the same files remain excluded.
+- Git staging done carefully, not via a blind `git add -A`: caught and unstaged one real near-miss (`Segmentation/data/processed/aligned_raw.zip`, an untracked ~4MB backup that isn't covered by any existing ignore pattern and would have been swept into the commit) — added a dedicated `.gitignore` entry for it. Also caught and unstaged an unrelated pre-existing `.claude/settings.local.json` modification that an earlier broad `git add -u` accidentally picked up.
+- Git correctly detected clean renames (not delete+add pairs) for all moved tracked files except one notebook that had a prior content modification — cosmetic only, not a functional issue.
 
 ## ✅ RESOLVED: white-background mask bug fixed, `aligned_raw/` regenerated (201/217, was 202/217)
 Full account: `CLAUDE.md` §1.4.4. The Kaggle run in flight against the buggy 202-patient data was manually stopped by the project author before this landed, so no contaminated training results exist to worry about.

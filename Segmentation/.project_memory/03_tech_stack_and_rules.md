@@ -8,20 +8,32 @@
 - `pandas`, `numpy`, `Pillow`, `scikit-learn` (stratified splitting), `openpyxl`.
 
 ## Directory structure
+
+**Moved into a dedicated `Segmentation/` top-level folder 2026-07-29** (project author request, for a clean, self-explanatory repo layout alongside the sibling `classification/` module). All paths below are relative to `Segmentation/`, which itself sits at the repo root next to `classification/`, `Source/`, and the shared `CLAUDE.md`/`requirements.txt`/`venv/`. No code changes were needed for this move — every script already computed its paths via `Path(__file__).resolve().parent[.parent]`, never `cwd`-relative or hardcoded, so the whole subtree moved as a self-consistent unit. `CLAUDE.md` deliberately stays at the repo root, not inside `Segmentation/` — see the note below.
+
 ```
-scripts/              -- all pipeline code (phase0, dataset.py, build_aligned_dataset.py,
-                          trainer_engine.py, train_*.py)
-models/segmentation/  -- unet.py, attention_unet.py, resunet.py
-data/processed/
-  images/, masks/      -- crop-based Phase 0 output (gitignored, regenerable from archive.zip)
-  aligned_raw/         -- images/masks gitignored; alignment_log.csv tracked
-  metadata.csv, dataset_splits.csv  -- tracked
-outputs/
-  checkpoints/         -- trained weights (.pth, gitignored)
-  logs/                -- per-trial CSV + best-trial JSON summaries (tracked)
-CLAUDE.md              -- authoritative, thesis-grade methodology reference
-.project_memory/       -- this lightweight working-memory system (roadmap/status/rules)
+D:\khaje\EYES-DEFY-ANEMIA\
+  CLAUDE.md              -- stays at repo root (see note below), updated to reference
+                             Segmentation/... paths throughout
+  requirements.txt, venv/, .gitignore, README.md, LICENSE  -- shared, repo-wide, at root
+  classification/        -- sibling module, untouched by this move
+  Source/                -- private research material, untouched, gitignored
+  Segmentation/
+    scripts/              -- all pipeline code (phase0, dataset.py, build_aligned_dataset.py,
+                              trainer_engine.py, train_*.py)
+    models/segmentation/  -- unet.py, attention_unet.py, resunet.py
+    data/processed/
+      images/, masks/      -- crop-based Phase 0 output (gitignored, regenerable from archive.zip)
+      aligned_raw/         -- images/masks gitignored; alignment_log.csv tracked
+      metadata.csv, dataset_splits.csv  -- tracked
+    outputs/
+      checkpoints/         -- trained weights (.pth, gitignored)
+      logs/                -- per-trial CSV + best-trial JSON summaries (tracked)
+    archive.zip            -- raw source data, gitignored
+    .project_memory/       -- this lightweight working-memory system (roadmap/status/rules)
 ```
+
+**Why `CLAUDE.md` stays at the repo root instead of moving into `Segmentation/`:** its own self-description is "the primary methodology reference for the project's written thesis" — a whole-project document (segmentation *and* classification), not segmentation-specific, even though its actual written content is 100% segmentation right now (classification/Phase 4 has never been written into it). Root placement also matters practically: Claude Code auto-loads a repo-root `CLAUDE.md` at the start of every session opened at `D:\khaje\EYES-DEFY-ANEMIA` — moving it into `Segmentation/` would silently stop that auto-loading for future sessions (the classification module's own `.project_memory/` already doesn't get auto-loaded, requiring explicit reference; the same would happen to this file if moved). `CLAUDE.md`'s own session-start instruction and every internal path reference were updated to point at `Segmentation/...` even though the file itself didn't move.
 
 ## Development rules we've established
 1. **Verify empirically, don't assume.** Every "it works" claim in this project has been backed by an actual run plus concrete evidence (shape checks, pixel-count math, visual overlays) — e.g. the raw-photo alignment was confirmed via a geometric pixel-count ratio check *and* visual inspection across both countries before being trusted.
