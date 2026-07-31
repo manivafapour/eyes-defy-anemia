@@ -33,8 +33,8 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-SHARED_SCRIPTS_DIR = Path(__file__).resolve().parent.parent  # classification/scripts/
-sys.path.insert(0, str(SHARED_SCRIPTS_DIR))
+SHARED_PIPELINE_DIR = Path(__file__).resolve().parent.parent  # classification/datapreparepipeline/
+sys.path.insert(0, str(SHARED_PIPELINE_DIR))
 from trainer_engine import build_efficientnet_b0, compute_metrics  # noqa: E402 -- reuse, don't duplicate
 
 from cv_dataset import get_fold_dataloaders, N_FOLDS, SEED  # noqa: E402

@@ -33,11 +33,11 @@ from PIL import Image
 from sklearn.model_selection import StratifiedKFold
 from torch.utils.data import DataLoader, Dataset
 
-SHARED_SCRIPTS_DIR = Path(__file__).resolve().parent.parent  # classification/scripts/
-sys.path.insert(0, str(SHARED_SCRIPTS_DIR))
+SHARED_PIPELINE_DIR = Path(__file__).resolve().parent.parent  # classification/datapreparepipeline/
+sys.path.insert(0, str(SHARED_PIPELINE_DIR))
 from dataset import get_train_transforms, get_eval_transforms, IMAGE_SIZE  # noqa: E402 -- reuse, don't duplicate
 
-MODULE_ROOT = SHARED_SCRIPTS_DIR.parent  # classification/
+MODULE_ROOT = SHARED_PIPELINE_DIR.parent  # classification/
 PROCESSED_DIR = MODULE_ROOT / "data" / "processed"
 IMAGES_DIR = PROCESSED_DIR / "images" / "forniceal_palpebral"
 SPLITS_CSV = PROCESSED_DIR / "splits.csv"

@@ -6,6 +6,7 @@ Same installed environment as the root project (same `venv/`, same PyTorch/torch
 **Architecture roster (9, as of the v2 expansion, 2026-07-28)** — all confirmed available in the installed `torchvision 0.28.0` with ImageNet-pretrained weights, all frozen-backbone + trained head: ResNet18, MobileNetV3-Small, EfficientNet-B0 (original 3), DenseNet121, ConvNeXt-Tiny, RegNetY-400MF (new CNNs), Swin-Tiny, ViT-B/16, ViT-L/16 (new transformers, lightweight/medium/heavy). Full rationale in `02_current_status.md`. Deliberately kept torchvision-native (no `timm`) to preserve the "no new dependencies" rule below.
 
 ## Directory structure
+**Renamed 2026-07-31:** `scripts/` -> `datapreparepipeline/` (git-mv'd, history preserved). The original 6 v1 entry-point scripts (`train_{arch}_{tissue}.py`, already retired/do-not-run as of the v2 expansion) were deleted outright rather than carried over, since nothing still depended on them. Every import/path reference to the old `scripts/` name (18 `v2_scripts/*.py` entry points, the CV pipeline's `cv_dataset.py`/`cv_trainer_engine.py`, `dataset.py`'s own docstring, `.gitignore`, and the 3 Kaggle notebooks) was updated and re-verified (`py_compile` + a real runtime import) to resolve against the new name. See `02_current_status.md` for the full account.
 ```
 classification/
   .gitignore              -- excludes data/raw/, data/processed/images/, outputs/checkpoints/
@@ -16,24 +17,23 @@ classification/
     processed/
       images/palpebral/, images/forniceal_palpebral/  -- gitignored, regenerable
       metadata.csv, splits.csv, extraction_log.csv     -- tracked, small
-  scripts/
+  datapreparepipeline/    -- (renamed from scripts/, 2026-07-31)
     prepare_dataset.py    -- fresh, independent data extraction/labeling/splitting
     dataset.py             -- PyTorch Dataset + transforms, resolution-aware since v2
     trainer_engine.py      -- shared Optuna training engine, 9-architecture registry since v2
-    train_{arch}_{tissue}.py  -- ORIGINAL 6 entry points (v1 protocol). RETIRED as of the
-                              v2 expansion -- trainer_engine.py changed underneath them, so
-                              re-running one as-is now executes the v2 protocol but would
-                              overwrite the v1 checkpoint/logs under the old model_name. Do
-                              not run these; kept on disk only as the v1 code record.
+    efficientnet_b0_forniceal_5fold_cv/  -- dedicated 5-fold CV pipeline (cv_dataset.py,
+                              cv_trainer_engine.py, run_cv_training.py, its own outputs/)
+    (the original 6 v1 entry-point scripts, train_{arch}_{tissue}.py, were deleted
+     2026-07-31 -- they were already retired/do-not-run as of the v2 expansion below)
   v2_scripts/
     train_{arch}_{tissue}_v2.py  -- 18 thin entry points (9 architectures x 2 tissue types),
                               v2 protocol (100-epoch ceiling, patience=7, dropout_rate tuned).
                               Isolated in its own directory specifically so the expanded
                               experiments never get confused with the original 6 at a glance.
-                              Imports trainer_engine.py from the sibling scripts/ directory
-                              via an explicit `parent.parent / "scripts"` path (verified
-                              working, since it's one level further away than the original
-                              6 scripts' same-directory import).
+                              Imports trainer_engine.py from the sibling datapreparepipeline/
+                              directory via an explicit `parent.parent / "datapreparepipeline"`
+                              path (verified working, since it's one level further away than
+                              the original 6 scripts' same-directory import).
   outputs/
     checkpoints/           -- gitignored
     logs/                   -- tracked (per-trial CSV + study summary JSON)

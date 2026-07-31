@@ -2,7 +2,7 @@
 Entry point (v2 protocol): 12-trial Optuna search for ViT-B/16 (frozen
 ImageNet backbone, Dropout->Linear head with dropout_rate itself
 Optuna-tuned) on the palpebral crop, via the shared engine in
-../scripts/trainer_engine.py. Standalone-runnable (e.g. `python
+../datapreparepipeline/trainer_engine.py. Standalone-runnable (e.g. `python
 classification/v2_scripts/train_vit_b_16_palpebral_v2.py`).
 
 v2 protocol vs. the original run: MAX_EPOCHS 30->100,
@@ -20,8 +20,8 @@ architecture has no v1 baseline (it was not part of the original 6-combo run).
 import sys
 from pathlib import Path
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
+DATAPREPAREPIPELINE_DIR = Path(__file__).resolve().parent.parent / "datapreparepipeline"
+sys.path.insert(0, str(DATAPREPAREPIPELINE_DIR))
 
 from trainer_engine import run_study  # noqa: E402
 

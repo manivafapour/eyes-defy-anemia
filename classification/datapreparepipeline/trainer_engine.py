@@ -55,9 +55,9 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader
 from torchvision import models
 
-SCRIPTS_DIR = Path(__file__).resolve().parent
-MODULE_ROOT = SCRIPTS_DIR.parent
-sys.path.insert(0, str(SCRIPTS_DIR))
+PIPELINE_DIR = Path(__file__).resolve().parent
+MODULE_ROOT = PIPELINE_DIR.parent
+sys.path.insert(0, str(PIPELINE_DIR))
 
 from dataset import BATCH_SIZE, get_dataloaders  # noqa: E402
 

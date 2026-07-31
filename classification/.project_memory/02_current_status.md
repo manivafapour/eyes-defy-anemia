@@ -1,6 +1,27 @@
 # Current Status — classification/ (Phase 4)
 
-Last updated: 2026-07-30
+Last updated: 2026-07-31
+
+## Refactor: `scripts/` renamed to `datapreparepipeline/`, v1 entry points deleted (2026-07-31)
+
+Project-author-requested cleanup, done while the 5-fold CV run (below) is executing on Kaggle. Three steps, in order:
+
+1. **Deleted the 6 already-retired v1 entry-point scripts** (`train_resnet18_palpebral.py`, `train_resnet18_forniceal_palpebral.py`, `train_mobilenetv3_palpebral.py`, `train_mobilenetv3_forniceal_palpebral.py`, `train_efficientnetb0_palpebral.py`, `train_efficientnetb0_forniceal_palpebral.py`) — these had been do-not-run/superseded since the v2 expansion (`01_roadmap.md`), so nothing still depended on them. `dataset.py`, `prepare_dataset.py`, `trainer_engine.py` kept intact.
+2. **`git mv classification/scripts classification/datapreparepipeline`** — rename detected correctly by git (confirmed via `git status`), full history preserved, including the nested `efficientnet_b0_forniceal_5fold_cv/` subfolder.
+3. **Updated every reference to the old `scripts/` path/name**, verified empirically rather than assumed:
+   - All 18 `v2_scripts/train_*_v2.py` — `SCRIPTS_DIR = ... / "scripts"` → `DATAPREPAREPIPELINE_DIR = ... / "datapreparepipeline"` (variable renamed too, not just the string, so nothing misleading is left behind), plus the docstring's `../scripts/trainer_engine.py` mention.
+   - `datapreparepipeline/trainer_engine.py`'s own self-referencing `SCRIPTS_DIR` → `PIPELINE_DIR` (missed by an initial path-string-only grep since it's a bare `Path(__file__).resolve().parent` with no literal "scripts" string — caught by a follow-up `SCRIPTS_DIR`-name grep).
+   - `datapreparepipeline/efficientnet_b0_forniceal_5fold_cv/cv_dataset.py` and `cv_trainer_engine.py` — `SHARED_SCRIPTS_DIR` → `SHARED_PIPELINE_DIR` (comment + variable). Their actual path-resolution logic (`Path(__file__).resolve().parent.parent`) needed **no functional change** — it was already relative/parent-based, not a hardcoded "scripts" string, so it naturally resolves correctly at the new location.
+   - `datapreparepipeline/dataset.py`'s docstring self-reference to `classification/scripts/prepare_dataset.py`.
+   - `classification/.gitignore`'s nested-checkpoints entry (`scripts/efficientnet_b0_forniceal_5fold_cv/outputs/checkpoints/` → `datapreparepipeline/...`).
+   - All 3 Kaggle notebooks — `efficientnet_b0_5fold_cv.ipynb` (9 cells: `sys.path.insert`, `sync_outputs()`'s `src_dir`, 5 per-fold `!python` calls, the `--aggregate` call, 1 markdown cell), and `classification-batch2.ipynb`/`classification-final-fixed.ipynb` (1 dataloader-sanity-check cell each) — edited via `NotebookEdit`, not raw text substitution.
+   - Deliberately **left untouched**: `prepare_dataset.py`/`trainer_engine.py`'s docstring mentions of "scripts/phase0_prepare_dataset.py" / "scripts/trainer_engine.py" — those refer to the *segmentation* phase's `Segmentation/scripts/`, a different directory in a different part of the repo, not this module's own (now-renamed) folder.
+
+**Verified, not just written:** `nbformat.validate()` passed on all 3 edited notebooks; `py_compile` passed on every touched `.py` file; a real runtime import (not just syntax) confirmed both `v2_scripts/train_resnet18_palpebral_v2.py` and the CV pipeline's `cv_dataset.py`/`cv_trainer_engine.py` successfully resolve `trainer_engine`/`dataset` through the new `datapreparepipeline/` path; a final repo-wide grep for `classification/scripts`, `classification\scripts`, and the bare `SCRIPTS_DIR` name (excluding this module's own historical `.project_memory` log entries, which are intentionally not rewritten) came back clean.
+
+**Does not affect the in-progress Kaggle 5-fold CV run** (see below) — that Kaggle kernel already did its own `git clone` of the pre-refactor repo state and won't re-clone mid-run; this rename is local-only and has not been pushed. It only matters for the *next* `git push` + future Kaggle re-clone, at which point the (already-updated) notebooks will need to be the ones actually uploaded/used.
+
+**Not done (explicitly deferred, project-author instruction):** reorganizing `outputs/` — held off for now, separate step.
 
 ## New dedicated pipeline: EfficientNet-B0 (forniceal_palpebral) 5-Fold CV (2026-07-30)
 

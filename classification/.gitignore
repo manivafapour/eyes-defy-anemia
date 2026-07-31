@@ -5,8 +5,8 @@ __pycache__/
 *.pyc
 *.zip
 
-# Dedicated pipelines under scripts/ (e.g. efficientnet_b0_forniceal_5fold_cv/)
+# Dedicated pipelines under datapreparepipeline/ (e.g. efficientnet_b0_forniceal_5fold_cv/)
 # each have their own outputs/checkpoints/ -- the pattern above is anchored
 # to this .gitignore's own directory (classification/) and does NOT match
 # these deeper, nested locations, so each needs its own entry.
-scripts/efficientnet_b0_forniceal_5fold_cv/outputs/checkpoints/
+datapreparepipeline/efficientnet_b0_forniceal_5fold_cv/outputs/checkpoints/

@@ -3,7 +3,7 @@ Phase 4 (Classification): PyTorch dataset + transforms.
 
 Independent of scripts/dataset.py (the segmentation-phase module) -- this
 reads exclusively from classification/data/processed/, produced by
-classification/scripts/prepare_dataset.py.
+classification/datapreparepipeline/prepare_dataset.py.
 """
 
 from pathlib import Path
