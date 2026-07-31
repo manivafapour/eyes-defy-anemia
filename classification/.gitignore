@@ -1,6 +1,11 @@
 data/raw/
 data/processed/images/
-outputs/checkpoints/
+# outputs/ was reorganized 2026-07-31 from flat outputs/{checkpoints,logs,plots}/
+# into one subfolder per (architecture, tissue_type) combo, e.g.
+# outputs/resnet18_palpebral_v2/best_resnet18_palpebral_v2.pth -- so the
+# checkpoint-ignore rule now matches by extension within any combo folder,
+# not by a fixed "checkpoints/" directory name.
+outputs/*/*.pth
 __pycache__/
 *.pyc
 *.zip
