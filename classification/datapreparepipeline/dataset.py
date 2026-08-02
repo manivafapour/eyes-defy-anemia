@@ -27,7 +27,9 @@ EXTRACTION_LOG_CSV = PROCESSED_DIR / "extraction_log.csv"
 
 TISSUE_TYPES = ["palpebral", "forniceal_palpebral"]
 IMAGE_SIZE = 256
-BATCH_SIZE = 16
+BATCH_SIZE = 32  # raised from 16, 2026-08-02 -- frozen backbones (only the head trains) leave
+                 # comfortable VRAM headroom on Kaggle's GPUs; halves the number of optimizer
+                 # steps per epoch across all 18 v2_clean combos
 SEED = 42
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)

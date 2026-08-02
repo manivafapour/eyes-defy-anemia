@@ -427,7 +427,10 @@ def run_study(arch_name: str, tissue_type: str, model_name: str, n_trials: int =
     print(f"Tissue type: {tissue_type}")
     print(f"Model name: {model_name}")
 
-    sampler = optuna.samplers.TPESampler(seed=SEED)
+    # n_startup_trials lowered from Optuna's default of 10, 2026-08-02 -- with N_TRIALS=12,
+    # the default would spend 10/12 trials on pure random sampling before TPE's Bayesian
+    # modeling ever engages. 5 leaves a real 7-trial informed-search budget instead of 2.
+    sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=5)
     study = optuna.create_study(direction="maximize", sampler=sampler)
     study.optimize(make_objective(arch_name, tissue_type, model_name), n_trials=n_trials)
 
