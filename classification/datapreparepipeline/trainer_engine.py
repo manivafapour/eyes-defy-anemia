@@ -68,7 +68,9 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 NUM_WORKERS = 0
 SEED = 42
 
-MAX_EPOCHS = 100
+MAX_EPOCHS = 250  # raised from 100, 2026-08-02 -- gives every trial more room to converge before
+                  # early stopping (patience=7 below) decides it's done; early stopping is still
+                  # the actual stopping mechanism for the vast majority of trials in practice
 EARLY_STOPPING_PATIENCE = 7  # raised from 5 -- dropout=0.5 trials add per-epoch val_loss noise, so a
 # too-tight patience risks stopping on a noisy bad epoch rather than genuine convergence, especially
 # now that the epoch ceiling was deliberately raised to give slow-converging trials room to use it.
