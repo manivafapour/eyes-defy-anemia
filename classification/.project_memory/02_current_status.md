@@ -2,6 +2,8 @@
 
 Last updated: 2026-08-02
 
+**Documentation convention change, 2026-08-02** (`03_tech_stack_and_rules.md` rule #9): this file had grown large enough to risk context overload, so new phases/major milestones now get their own sequentially-numbered file instead of another section appended here. The entries below are kept as the historical record up to the split point. **The Kaggle clean-data 18-combo training phase — the active next step as of this split — is now tracked in `05_kaggle_training_phase.md`, not here.**
+
 ## READY FOR TRAINING: white-background fix, WHO labeling reconfirmed, dataset verified clean (2026-08-02)
 
 Consolidated go/no-go checkpoint before launching the clean-data 18-combo Kaggle sweep. Four things converged today; full detail on each is in its own dated entry below/elsewhere in this file — this entry is the summary tying them together.
