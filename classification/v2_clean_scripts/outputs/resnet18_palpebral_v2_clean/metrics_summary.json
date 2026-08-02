@@ -1,0 +1,21 @@
+{
+  "model_name": "resnet18_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 10,
+  "f1": 0.8387096774193549,
+  "accuracy": 0.8484848484848485,
+  "recall": 0.9285714285714286,
+  "precision": 0.7647058823529411,
+  "specificity": 0.7894736842105263,
+  "balanced_accuracy": 0.8590225563909775,
+  "auc_overall": 0.8909774436090225,
+  "auc_india": 0.75,
+  "auc_italy": 0.9666666666666667,
+  "india_italy_auc_gap": 0.21666666666666667,
+  "best_params": {
+    "learning_rate": 0.0021454841512197117,
+    "weight_decay": 1.1211234935464234e-06,
+    "dropout_rate": 0.2
+  },
+  "timestamp_utc": "2026-08-02T16:01:59.982552+00:00"
+}

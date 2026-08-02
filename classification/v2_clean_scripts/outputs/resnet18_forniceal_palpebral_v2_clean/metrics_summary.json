@@ -1,0 +1,21 @@
+{
+  "model_name": "resnet18_forniceal_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 1,
+  "f1": 0.7692307692307693,
+  "accuracy": 0.8064516129032258,
+  "recall": 0.7142857142857143,
+  "precision": 0.8333333333333334,
+  "specificity": 0.8823529411764706,
+  "balanced_accuracy": 0.7983193277310925,
+  "auc_overall": 0.773109243697479,
+  "auc_india": 0.725,
+  "auc_italy": 1.0,
+  "india_italy_auc_gap": 0.275,
+  "best_params": {
+    "learning_rate": 0.00029380279387035364,
+    "weight_decay": 2.9375384576328313e-06,
+    "dropout_rate": 0.5
+  },
+  "timestamp_utc": "2026-08-02T16:06:55.437623+00:00"
+}

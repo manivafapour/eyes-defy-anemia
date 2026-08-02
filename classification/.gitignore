@@ -15,3 +15,17 @@ __pycache__/
 # to this .gitignore's own directory (classification/) and does NOT match
 # these deeper, nested locations, so each needs its own entry.
 datapreparepipeline/efficientnet_b0_forniceal_5fold_cv/outputs/checkpoints/
+
+# Same reason: v2_clean_scripts/outputs/ (Kaggle results downloaded/organized
+# there directly, 2026-08-02) is a deeper, separate location the anchored
+# outputs/*/*.pth pattern above does not reach.
+v2_clean_scripts/outputs/*/*.pth
+v2_clean_scripts/outputs/checkpoints/
+
+# Same reason again: classification/outputs/ (the original v2 sweep's results)
+# was manually relocated to v2_scripts/outputs/ by the project author,
+# 2026-08-02, to sit alongside the scripts that produced it (mirroring
+# v2_clean_scripts/ above) -- another deeper location the anchored pattern
+# doesn't reach, and this one actually had 18 untracked checkpoints in it.
+v2_scripts/outputs/*/*.pth
+v2_scripts/outputs/checkpoints/

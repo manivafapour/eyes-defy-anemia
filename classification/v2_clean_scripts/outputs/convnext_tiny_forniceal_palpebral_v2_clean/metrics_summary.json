@@ -1,0 +1,21 @@
+{
+  "model_name": "convnext_tiny_forniceal_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 5,
+  "f1": 0.7777777777777778,
+  "accuracy": 0.7419354838709677,
+  "recall": 1.0,
+  "precision": 0.6363636363636364,
+  "specificity": 0.5294117647058824,
+  "balanced_accuracy": 0.7647058823529411,
+  "auc_overall": 0.7436974789915967,
+  "auc_india": 0.575,
+  "auc_italy": 0.8653846153846153,
+  "india_italy_auc_gap": 0.29038461538461535,
+  "best_params": {
+    "learning_rate": 0.07734445970634252,
+    "weight_decay": 0.00047982072674057337,
+    "dropout_rate": 0.5
+  },
+  "timestamp_utc": "2026-08-02T16:55:04.575391+00:00"
+}

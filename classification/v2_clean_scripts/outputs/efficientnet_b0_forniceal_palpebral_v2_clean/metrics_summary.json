@@ -1,0 +1,21 @@
+{
+  "model_name": "efficientnet_b0_forniceal_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 0,
+  "f1": 0.9032258064516129,
+  "accuracy": 0.9032258064516129,
+  "recall": 1.0,
+  "precision": 0.8235294117647058,
+  "specificity": 0.8235294117647058,
+  "balanced_accuracy": 0.9117647058823529,
+  "auc_overall": 0.8823529411764706,
+  "auc_india": 0.625,
+  "auc_italy": 0.9615384615384616,
+  "india_italy_auc_gap": 0.33653846153846156,
+  "best_params": {
+    "learning_rate": 0.0013292918943162175,
+    "weight_decay": 0.0007114476009343421,
+    "dropout_rate": 0.2
+  },
+  "timestamp_utc": "2026-08-02T15:58:08.851312+00:00"
+}

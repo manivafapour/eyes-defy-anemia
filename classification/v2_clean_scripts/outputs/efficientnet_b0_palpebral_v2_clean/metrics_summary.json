@@ -1,0 +1,21 @@
+{
+  "model_name": "efficientnet_b0_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 3,
+  "f1": 0.8666666666666667,
+  "accuracy": 0.8787878787878788,
+  "recall": 0.9285714285714286,
+  "precision": 0.8125,
+  "specificity": 0.8421052631578947,
+  "balanced_accuracy": 0.8853383458646616,
+  "auc_overall": 0.9323308270676691,
+  "auc_india": 0.75,
+  "auc_italy": 0.9666666666666667,
+  "india_italy_auc_gap": 0.21666666666666667,
+  "best_params": {
+    "learning_rate": 0.03142880890840111,
+    "weight_decay": 4.335281794951567e-06,
+    "dropout_rate": 0.5
+  },
+  "timestamp_utc": "2026-08-02T15:52:28.107962+00:00"
+}

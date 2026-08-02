@@ -1,0 +1,21 @@
+{
+  "model_name": "regnet_y_400mf_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 9,
+  "f1": 0.875,
+  "accuracy": 0.8787878787878788,
+  "recall": 1.0,
+  "precision": 0.7777777777777778,
+  "specificity": 0.7894736842105263,
+  "balanced_accuracy": 0.8947368421052632,
+  "auc_overall": 0.9172932330827068,
+  "auc_india": 0.725,
+  "auc_italy": 0.9666666666666667,
+  "india_italy_auc_gap": 0.2416666666666667,
+  "best_params": {
+    "learning_rate": 0.0011249436130085291,
+    "weight_decay": 0.00011856737112037188,
+    "dropout_rate": 0.2
+  },
+  "timestamp_utc": "2026-08-02T15:37:04.842401+00:00"
+}

@@ -1,0 +1,21 @@
+{
+  "model_name": "densenet121_forniceal_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 10,
+  "f1": 0.8484848484848485,
+  "accuracy": 0.8387096774193549,
+  "recall": 1.0,
+  "precision": 0.7368421052631579,
+  "specificity": 0.7058823529411765,
+  "balanced_accuracy": 0.8529411764705883,
+  "auc_overall": 0.8781512605042017,
+  "auc_india": 0.675,
+  "auc_italy": 0.9807692307692308,
+  "india_italy_auc_gap": 0.3057692307692308,
+  "best_params": {
+    "learning_rate": 0.018362839120451776,
+    "weight_decay": 0.0001537467136904321,
+    "dropout_rate": 0.5
+  },
+  "timestamp_utc": "2026-08-02T16:26:24.967756+00:00"
+}

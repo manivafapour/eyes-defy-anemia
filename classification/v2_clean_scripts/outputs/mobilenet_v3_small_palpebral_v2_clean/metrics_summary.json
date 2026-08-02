@@ -1,0 +1,21 @@
+{
+  "model_name": "mobilenet_v3_small_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 5,
+  "f1": 0.7741935483870968,
+  "accuracy": 0.7878787878787878,
+  "recall": 0.8571428571428571,
+  "precision": 0.7058823529411765,
+  "specificity": 0.7368421052631579,
+  "balanced_accuracy": 0.7969924812030075,
+  "auc_overall": 0.8759398496240601,
+  "auc_india": 0.775,
+  "auc_italy": 0.8833333333333334,
+  "india_italy_auc_gap": 0.10833333333333339,
+  "best_params": {
+    "learning_rate": 0.08088564223049027,
+    "weight_decay": 1.0422971466648463e-06,
+    "dropout_rate": 0.5
+  },
+  "timestamp_utc": "2026-08-02T15:44:45.876829+00:00"
+}
