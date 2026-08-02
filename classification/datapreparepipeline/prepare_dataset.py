@@ -21,6 +21,17 @@ independently against the extracted raw archive, not assumed):
     give a clean black background. An explicit Image.alpha_composite onto a
     solid black RGBA canvas is required to actually zero it out (verified:
     0.0 mean / 0 max after compositing, vs. ~36 without it).
+  - Some source crops (verified: 30/211 forniceal_palpebral patients, all
+    Italy, 0 India -- found 2026-08-01 while investigating a Grad-CAM
+    diagnostic) delimit tissue with an OPAQUE WHITE background instead of
+    alpha transparency -- the exact same source-data convention issue the
+    segmentation phase independently discovered and fixed (root CLAUDE.md
+    Sec 1.4.4). alpha_composite is a no-op when alpha=255 everywhere, so
+    it silently passed the white background straight through into the
+    processed .jpg unchanged. flatten_to_black() now detects this per-crop
+    (ported from Segmentation/scripts/build_aligned_dataset.py's
+    _alpha_is_functional() logic, same thresholds) and falls back to a
+    near-white RGB threshold instead of alpha-compositing.
 
 Labels use WHO thresholds for non-pregnant adults (Male Hb < 13.0 g/dL,
 Female Hb < 12.0 g/dL), same rule for both countries -- NOT the
@@ -182,14 +193,57 @@ def sanitize_png_bytes(data: bytes) -> bytes:
     return b"".join(out)
 
 
+# Same thresholds as Segmentation/scripts/build_aligned_dataset.py's
+# _alpha_is_functional()/_white_background_mask() (root CLAUDE.md Sec 1.4.4)
+# -- ported, not re-derived, since that logic was already validated against
+# the full 217-patient source data (legitimate alpha-cutout patients top
+# out at ~13% opaque fraction; every white-background patient sits at
+# exactly 100% opaque -- any threshold between those two clusters is safe).
+ALPHA_THRESHOLD = 127
+OPAQUE_ALPHA_FRACTION_THRESHOLD = 0.99
+WHITE_BACKGROUND_THRESHOLD = 245  # RGB >= this in all 3 channels counts as background
+
+
+def _alpha_is_functional(rgba_img: Image.Image) -> bool:
+    """True if this crop's alpha channel encodes a real tissue cutout
+    (non-trivial transparency) rather than being uniformly/near-uniformly
+    opaque -- in which case alpha carries no shape information at all, and
+    the crop instead delimits tissue via an opaque white background baked
+    directly into RGB. Assumes rgba_img is already mode "RGBA" (true at
+    this function's only call site, process_crop(), which converts before
+    calling) -- a source with no alpha channel at all ends up with alpha=255
+    everywhere post-convert, which this correctly classifies as
+    non-functional too, via the same opaque-fraction check."""
+    alpha = np.array(rgba_img)[..., 3]
+    opaque_fraction = (alpha > ALPHA_THRESHOLD).mean()
+    return opaque_fraction < OPAQUE_ALPHA_FRACTION_THRESHOLD
+
+
 def flatten_to_black(rgba_img: Image.Image) -> Image.Image:
-    """Explicit alpha-composite onto a solid black RGBA canvas, THEN drop
-    the alpha channel. Verified necessary: the source crop's transparent
-    region is not already black (mean RGB ~36 at native resolution) --
-    plain .convert("RGB") would leave visible noise in the background.
-    alpha_composite gives an exact, guaranteed 0.0 mean / 0 max result."""
-    black_bg = Image.new("RGBA", rgba_img.size, (0, 0, 0, 255))
-    return Image.alpha_composite(black_bg, rgba_img).convert("RGB")
+    """Flattens a source crop to a guaranteed-black background, regardless
+    of which of the two conventions the source PNG uses to delimit tissue:
+
+    - Normal case (alpha functional): explicit alpha-composite onto a solid
+      black RGBA canvas. Verified necessary on its own: the source crop's
+      transparent region is not already black (mean RGB ~36 at native
+      resolution) -- plain .convert("RGB") alone would leave visible noise
+      in the background. alpha_composite gives an exact, guaranteed
+      0.0 mean / 0 max result.
+    - Fallback case (alpha non-functional -- see _alpha_is_functional):
+      alpha-compositing would be a no-op here (alpha=1 everywhere means
+      "always use foreground"), silently passing an opaque white background
+      straight through unchanged -- exactly the bug this branch corrects.
+      Near-white pixels (>=245 in every channel) are replaced with black
+      directly instead.
+    """
+    if _alpha_is_functional(rgba_img):
+        black_bg = Image.new("RGBA", rgba_img.size, (0, 0, 0, 255))
+        return Image.alpha_composite(black_bg, rgba_img).convert("RGB")
+
+    rgb = np.array(rgba_img.convert("RGB"))
+    is_background = (rgb >= WHITE_BACKGROUND_THRESHOLD).all(axis=-1)
+    rgb[is_background] = (0, 0, 0)
+    return Image.fromarray(rgb, mode="RGB")
 
 
 def pad_to_square(img: Image.Image, fill=(0, 0, 0)) -> Image.Image:

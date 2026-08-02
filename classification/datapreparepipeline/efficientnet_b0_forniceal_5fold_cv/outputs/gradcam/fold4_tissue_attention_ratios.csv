@@ -1,0 +1,29 @@
+group,patient_id,white_bg,tissue_attention_ratio
+India False Positive,India_027,False,0.20931775867938995
+India False Positive,India_083,False,0.2208457738161087
+India False Positive,India_088,False,0.032036758959293365
+India True Positive,India_013,False,0.23545390367507935
+India True Positive,India_018,False,0.051920365542173386
+India True Positive,India_028,False,0.22747290134429932
+India True Positive,India_030,False,0.32326841354370117
+India True Positive,India_032,False,0.23978684842586517
+India True Positive,India_056,False,0.2553628087043762
+India True Positive,India_061,False,0.2705293893814087
+India True Positive,India_063,False,0.25483769178390503
+India True Positive,India_064,False,0.33153367042541504
+India True Positive,India_084,False,0.17140497267246246
+India True Positive,India_094,False,0.47560885548591614
+Italy Baseline,Italy_012,True,0.22210197150707245
+Italy Baseline,Italy_027,True,0.24772243201732635
+Italy Baseline,Italy_029,True,0.30089452862739563
+Italy Baseline,Italy_043,False,0.27013975381851196
+Italy Baseline,Italy_052,False,1.5472163795493543e-05
+Italy Baseline,Italy_055,False,0.0010821992764249444
+Italy Baseline,Italy_057,False,0.010507979430258274
+Italy Baseline,Italy_059,False,0.0006265742122195661
+Italy Baseline,Italy_062,False,0.373460054397583
+Italy Baseline,Italy_064,False,0.0
+Italy Baseline,Italy_095,False,0.703914225101471
+Italy Baseline,Italy_100,False,0.0050835697911679745
+Italy Baseline,Italy_107,False,0.010906434617936611
+Italy Baseline,Italy_122,False,0.24834546446800232
