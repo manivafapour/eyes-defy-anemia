@@ -1,4 +1,13 @@
 {
+  "outputStyle": "default",
   "spinnerTipsEnabled": true,
-  "outputStyle": "default"
+  "permissions": {
+    "allow": [
+      "Read(//d/khaje/Sem8/**)",
+      "Read(//c/Users/Asus/Desktop/**)",
+      "Read(//c/Users/Asus/Downloads/**)",
+      "Read(//c/Users/Asus/Documents/**)",
+      "Bash(find /d -maxdepth 3 -iname \"*hb*\" -o -iname \"*conjunctiva*\" -o -iname \"*palpebral*\")"
+    ]
+  }
 }

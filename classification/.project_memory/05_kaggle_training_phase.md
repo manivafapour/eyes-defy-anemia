@@ -13,11 +13,7 @@ Retraining the full 18-combo v2 architecture sweep (9 architectures × 2 tissue 
 
 ## Status
 
-**Not yet launched.** Waiting on:
-1. Project author to upload the reprocessed `classification/data/processed/` as a new Kaggle dataset.
-2. Both notebooks to be run on Kaggle (`classification-cnn-clean.ipynb` — 12 CNN combos; `classification-vit-clean.ipynb` — 6 transformer combos, `swin_t`+`vit_b_16`+`vit_l_16`).
-
-No known blockers on the code or data side.
+**CNN batch (`classification-cnn-clean.ipynb`, 12 combos) — complete, results in.** ViT batch (`classification-vit-clean.ipynb`, 6 combos) — not yet run. This maps onto the project author's stated 3-phase roadmap (Phase 1: this 18-combo Optuna sweep → Phase 2: select top-2 CNN + top-2 transformer → Phase 3: 3-fold CV on the 4 champions) as: Phase 1 half-done.
 
 ## Naming reference (for when results start coming in)
 
@@ -36,4 +32,41 @@ Two changes to the shared engine before launch, both in code every one of the 18
 
 Verified before considering this done: both files `py_compile` clean; runtime check confirms `dataset.BATCH_SIZE` (32) propagates through `trainer_engine.py`'s import; a `v2_clean_scripts` entry point (`train_resnet18_palpebral_v2_clean.py`) confirmed to see `BATCH_SIZE=32` via the shared module, not a stale copy.
 
-*(Further entries appended here as the training phase progresses — dataset upload confirmation, per-notebook run status, results extraction, analysis. Once this phase is complete and a new one starts, e.g. a results-analysis or mitigation-implementation phase, that gets its own `06_...` file in turn.)*
+### 2026-08-02 — CNN batch complete: results organized, compared, and committed
+
+Project author confirmed `classification-cnn-clean.ipynb` finished running on Kaggle, downloaded the results zip, and placed/unzipped it at `classification/v2_clean_scripts/outputs/` (flat `checkpoints/`/`logs/`/`plots/`, matching the notebook's `sync_outputs()` layout — verified: 12 checkpoints, 24 logs, 48 plots, all 12 `study_summary.json` files parse).
+
+**`organize_and_compare.py` written** (`classification/v2_clean_scripts/`) — discovers combos dynamically from `outputs/logs/*_study_summary.json` filenames rather than a hardcoded architecture list, so the same script works unchanged for the ViT batch later. Per combo: moves checkpoint + 2 logs + 4 plots into `outputs/{combo_name}/` (7 files each), writes `metrics_summary.json`+`.md` (F1/Accuracy/Recall/Precision/Specificity/Balanced Accuracy as requested, plus AUC and the India/Italy breakdown as bonus context), and builds `outputs/model_comparison/comparison_table.csv`+`comparison_report.md` ranked by F1. Run for real (not just written) — output verified against the actual files afterward.
+
+**CNN batch results (clean data, all 12 combos, sorted by F1):**
+
+| Rank | Model | F1 | Balanced Acc. | AUC | India/Italy AUC Gap |
+|---|---|---|---|---|---|
+| 1 | ConvNeXt-Tiny / palpebral | 0.9333 | 0.9474 | 0.9398 | 0.1000 |
+| 2 | EfficientNet-B0 / forniceal_palpebral | 0.9032 | 0.9118 | 0.8824 | 0.3365 |
+| 3 | RegNetY-400MF / forniceal_palpebral | 0.8966 | 0.9055 | 0.8739 | 0.4500 |
+| 4 | RegNetY-400MF / palpebral | 0.8750 | 0.8947 | 0.9173 | 0.2417 |
+| 5 | EfficientNet-B0 / palpebral | 0.8667 | 0.8853 | 0.9323 | 0.2167 |
+| 6 | DenseNet121 / forniceal_palpebral | 0.8485 | 0.8529 | 0.8782 | 0.3058 |
+| 7 | ResNet18 / palpebral | 0.8387 | 0.8590 | 0.8910 | 0.2167 |
+| 8 | DenseNet121 / palpebral | 0.8387 | 0.8590 | 0.8872 | 0.3583 |
+| 9 | ConvNeXt-Tiny / forniceal_palpebral | 0.7778 | 0.7647 | 0.7437 | 0.2904 |
+| 10 | MobileNetV3-Small / palpebral | 0.7742 | 0.7970 | 0.8759 | 0.1083 |
+| 11 | ResNet18 / forniceal_palpebral | 0.7692 | 0.7983 | 0.7731 | 0.2750 |
+| 12 | MobileNetV3-Small / forniceal_palpebral | 0.7568 | 0.7353 | 0.7941 | **0.0192** |
+
+**Top performer: ConvNeXt-Tiny/palpebral** (F1=0.9333, Balanced Accuracy=0.9474, AUC=0.9398) — also a genuinely good India/Italy AUC gap (0.100), not just a good headline number. **Best confound-handling: MobileNetV3-Small/forniceal_palpebral** (gap=0.0192, smallest of all 12) but much weaker F1 (0.7568) — same "best-overall vs. best-confound-handling disagree" pattern as every prior sweep in this project (original 6-combo, dirty-data 18-combo v2). Not yet compared against the *dirty-data* v2 results for these same 12 (architecture, tissue) pairs to see whether/how much the white-background fix changed rankings — that comparison is a natural next step once useful, not yet done.
+
+**Two more gitignore anchoring gaps found and fixed** (3rd and 4th instances of the same issue this project keeps hitting — `outputs/*/*.pth` is anchored to `classification/`'s own directory level and does not reach deeper nested locations):
+- `v2_clean_scripts/outputs/*/*.pth` — found while organizing the CNN batch results above, before any checkpoint could be staged.
+- `v2_scripts/outputs/*/*.pth` — found when the project author manually relocated `classification/outputs/` (the *original dirty-data* 18-combo v2 results + `v2_comparison_results/`) to `classification/v2_scripts/outputs/`, to sit alongside the scripts that produced it (mirroring the `v2_clean_scripts/` layout). This one mattered more: 18 checkpoint files, some very large (e.g. ViT-L/16 ≈1.2GB), were briefly stageable before the fix.
+
+**That manual relocation verified content-lossless before staging, not assumed:** hash-compared a JSON and a PNG (byte-identical), and traced the one file that showed a hash difference (`v2_comparison_results/comparison_table.csv`) down to a pure CRLF/LF line-ending artifact (19 lines, 19 extra bytes, zero semantic change — confirmed via `od -c` byte inspection) rather than a real edit. Git detected all 114 moved files as clean 100% renames.
+
+**Committed (`c6f03a0`):** the relocation (114 renames), the gitignore fixes, and the organized CNN batch results (`organize_and_compare.py` + `v2_clean_scripts/outputs/`, 12 combos + `model_comparison/`) — 214 files, verified zero files over 5MB before committing.
+
+**A second Kaggle-pushed commit found via the now-standard fetch-before-push check** — the *fully executed* `classification-cnn-clean.ipynb` (9,020 insertions, real outputs in 19 code cells). Verified cell sources were byte-identical to local before merging (zero divergence to reconcile) — purely additive, merged cleanly (`520e29f`), `nbformat.validate()` passed. Pushed; local and remote confirmed in sync.
+
+**Not yet done:** ViT batch (`classification-vit-clean.ipynb`) not yet run. Comparison against the dirty-data v2 results for the same 12 combos not yet done. Phase 2 (select top-2 CNN + top-2 transformer) waits on the ViT batch completing so all 18 combos can be compared together, same "analyze once, not twice" pattern already used for batch 1/batch 2 of the original v2 sweep.
+
+*(Further entries appended here as the training phase progresses — ViT batch results, the full 18-combo clean-data comparison, Phase 2 selection. Once this phase is complete and a new one starts, e.g. Phase 3's 3-fold CV on the champions, that gets its own `07_...` file in turn. Note: `06_efficientnet_b0_5fold_cv_deep_dive.md`, a separate file, consolidates earlier work that chronologically *preceded* this phase — sequential numbering here reflects file-creation order, not chronology.)*

@@ -17,6 +17,8 @@ classification/
     03_tech_stack_and_rules.md  -- this file
     04_literature_review_findings.md  -- threshold/bias literature review (2026-07-28)
     05_kaggle_training_phase.md  -- clean-data 18-combo Kaggle sweep (2026-08-02 on)
+    06_efficientnet_b0_5fold_cv_deep_dive.md  -- consolidated EfficientNet-B0/forniceal_palpebral
+                              5-fold CV + Grad-CAM record (2026-07-30/08-01 work, file created 08-02)
     kaggle/01_kaggle_notes.md    -- Kaggle execution environment notes (paths, quirks, recipes)
   data/
     raw/                  -- full extraction of archive.zip (gitignored, regenerable)
