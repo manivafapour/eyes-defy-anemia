@@ -40,6 +40,8 @@ Project author confirmed `classification-cnn-clean.ipynb` finished running on Ka
 
 **CNN batch results (clean data, all 12 combos, sorted by F1):**
 
+> **Caveat added 2026-08-04 — read before citing the `India/Italy AUC Gap` column.** Every India AUC behind this column is computed on 40 discordant pairs (10 anemic × 4 healthy in the 33-patient val split), giving a 95% CI half-width of roughly ±0.27 — wide enough to swallow the entire observed spread. The per-combo gap ordering below is therefore **not** a reliable ranking of confound handling, and the gap range 0.0192–0.4500 should not be read as 12 distinguishable results. What *is* solid is the systematic direction (India AUC < Italy AUC in 11 of 12 models, sign test p=0.0064) and the tissue-type effect (palpebral beats forniceal_palpebral on India AUC in 5 of 6 paired architecture comparisons, mean +0.121). The F1/Balanced-Accuracy/AUC-overall columns are computed on the full 33 patients and are less affected, though still single-split point estimates. `07_step1_measurement_harness.md` replaces this estimator with a 1,311-pair pooled out-of-fold one; re-derive any confound claim against that once it has run.
+
 | Rank | Model | F1 | Balanced Acc. | AUC | India/Italy AUC Gap |
 |---|---|---|---|---|---|
 | 1 | ConvNeXt-Tiny / palpebral | 0.9333 | 0.9474 | 0.9398 | 0.1000 |

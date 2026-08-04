@@ -18,7 +18,10 @@ classification/
     04_literature_review_findings.md  -- threshold/bias literature review (2026-07-28)
     05_kaggle_training_phase.md  -- clean-data 18-combo Kaggle sweep (2026-08-02 on)
     06_efficientnet_b0_5fold_cv_deep_dive.md  -- consolidated EfficientNet-B0/forniceal_palpebral
-                              5-fold CV + Grad-CAM record (2026-07-30/08-01 work, file created 08-02)
+                              5-fold CV + Grad-CAM record (2026-07-30/08-01 work, file created 08-02).
+                              HISTORICAL RECORD ONLY -- that pipeline is deprecated (see below)
+    07_step1_measurement_harness.md  -- defensibility/interpretability programme, Step 1
+                              (pooled out-of-fold repeated CV + bootstrap CIs, 2026-08-04 on)
     kaggle/01_kaggle_notes.md    -- Kaggle execution environment notes (paths, quirks, recipes)
   data/
     raw/                  -- full extraction of archive.zip (gitignored, regenerable)
@@ -29,8 +32,17 @@ classification/
     prepare_dataset.py    -- fresh, independent data extraction/labeling/splitting
     dataset.py             -- PyTorch Dataset + transforms, resolution-aware since v2
     trainer_engine.py      -- shared Optuna training engine, 9-architecture registry since v2
-    efficientnet_b0_forniceal_5fold_cv/  -- dedicated 5-fold CV pipeline (cv_dataset.py,
-                              cv_trainer_engine.py, run_cv_training.py, its own outputs/)
+    efficientnet_b0_forniceal_5fold_cv/  -- DEPRECATED (project author, 2026-08-04).
+                              Dedicated 5-fold CV pipeline (cv_dataset.py, cv_trainer_engine.py,
+                              run_cv_training.py, its own outputs/). Its results were produced on
+                              pre-fix data (white-background bug), so they are not comparable with
+                              any _v2_clean result; the author intends to delete the folder. DO NOT
+                              extend, import from, or cite its numbers -- in particular the
+                              "recall 1.000 / specificity 0.35 across 5 folds" finding is about
+                              THIS pipeline only and was mistakenly attributed to the v2_clean
+                              models once (2026-08-04). Superseded by step1_cv_harness/ below,
+                              which was deliberately built as a clean slate rather than extending
+                              it. Historical record kept in .project_memory/06_....md.
     (the original 6 v1 entry-point scripts, train_{arch}_{tissue}.py, were deleted
      2026-07-31 -- they were already retired/do-not-run as of the v2 expansion below)
   v2_scripts/
@@ -42,6 +54,21 @@ classification/
                               directory via an explicit `parent.parent / "datapreparepipeline"`
                               path (verified working, since it's one level further away than
                               the original 6 scripts' same-directory import).
+  v2_clean_scripts/
+    train_{arch}_{tissue}_v2_clean.py  -- 18 entry points, same v2 protocol against the
+                              white-background-bug-fixed data. Its outputs/ holds the 12
+                              completed CNN results (ViT batch still unrun).
+  step1_cv_harness/         -- NEW 2026-08-04. Defensibility programme, Step 1: pooled
+                              out-of-fold repeated stratified CV + bootstrap CIs, replacing
+                              the single split's 40-discordant-pair India AUC (CI half-width
+                              ~+/-0.27) with a 1,311-pair estimate. cv_config.py, cv_data.py,
+                              cv_engine.py, cv_stats.py, validate_harness.py,
+                              run_cv_harness.py, aggregate_baseline.py, README.md, outputs/.
+                              IMPORTS (never copies) the live datapreparepipeline/ architecture
+                              builders and transforms, so the models it measures are
+                              bit-identical to what v2_clean trained -- a forked copy would
+                              silently drift and stop being a valid baseline. Writes NO
+                              checkpoints by design (predictions, not weights).
   outputs/
     checkpoints/           -- gitignored
     logs/                   -- tracked (per-trial CSV + study summary JSON)
@@ -68,3 +95,11 @@ classification/
    - `01_roadmap.md` still tracks the checklist across all phases (it's a index of *done/pending*, not detailed narrative, so it doesn't have the same bloat problem) and continues to be updated in place.
    - Each new phase file should still open with the same "what is this, when did it start, what's it for" framing the existing numbered files use, so it's readable standalone without needing `02_current_status.md` as context.
    - When in doubt about whether something is "a new phase" vs. "more detail on the current one," default to a new file — splitting too early costs a cross-reference link; splitting too late is exactly the density problem this rule exists to prevent.
+10. **State the statistical power before reporting a comparison, and compare interventions with a PAIRED test** (added 2026-08-04, after finding that the India/Italy AUC gap column — the project's primary confound signal — rests on 40 discordant pairs, giving a 95% CI half-width of ~±0.27 that silently swallowed the entire observed 0.550–1.000 spread across 12 models).
+    - Any per-country metric quoted from a single 33-patient split is a point estimate with a CI wider than most effects of interest. Report the CI or say the number is underpowered; never present such a ranking as a ranking of models.
+    - A **systematic** effect across many independently-trained models (e.g. India < Italy in 11/12, sign test p=0.0064) can be solid even when every individual value is noise. Distinguish the two explicitly.
+    - Interventions (Steps 3–5) must reuse the persisted fold assignments from `step1_cv_harness/outputs/{combo}/fold_manifest.json` and be compared via `cv_stats.paired_delta_auc()`, **not** by checking whether two independent CIs overlap. Measured on real out-of-fold predictions with a +0.03 probability shift: paired detected it (CI [+0.073, +0.252]), unpaired did not (CI [−0.043, +0.340]).
+
+## Technical facts worth not rediscovering
+- **`requires_grad=False` does NOT freeze BatchNorm running statistics.** `running_mean`/`running_var` keep updating on every forward pass in `train()` mode, which affects 5 of the 6 CNNs in this roster (all except the pure-transformer heads). Found 2026-08-04 while building `step1_cv_harness/cv_engine.py`: a best-epoch snapshot that captures only trainable parameters will restore the best head paired with the *last* epoch's normalization statistics. Snapshot buffers too. This also means "the backbone is frozen" is not strictly true for BN statistics in any run in this project, v2_clean included — worth stating precisely rather than loosely in the thesis.
+- **With a frozen backbone and a `GAP → Dropout → Linear` head, Grad-CAM degenerates to exact CAM** — global average pooling makes the gradient w.r.t. each feature-map channel constant across space, so the CAM weights *are* the learned head weights. Exact rather than heuristic (a genuine defensibility argument), but it makes the method **cue-blind**: a colour/illumination shortcut is a channel reweighting, not a spatial displacement. Holds cleanly for ResNet18/EfficientNet-B0/RegNetY-400MF/DenseNet121; perturbed for ConvNeXt-Tiny (LayerNorm between pooling and linear) and MobileNetV3-Small (a frozen `Linear(576→1024)+Hardswish` sits in between).

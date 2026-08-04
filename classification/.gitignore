@@ -29,3 +29,12 @@ v2_clean_scripts/outputs/checkpoints/
 # doesn't reach, and this one actually had 18 untracked checkpoints in it.
 v2_scripts/outputs/*/*.pth
 v2_scripts/outputs/checkpoints/
+
+# Pre-emptive, same anchoring reason (this is the 5th place it applies):
+# step1_cv_harness/ is deliberately designed to write NO checkpoints -- Step 1
+# needs out-of-fold predictions, not weights -- so its outputs/ is all small
+# tracked text (oof_predictions.csv, fold_manifest.json, cv_metrics.json, and
+# the frozen baseline, all of which Steps 2-5 read). This entry exists only so
+# that if checkpoint saving is ever added there, it cannot be staged by
+# accident before someone notices the anchored pattern above never reached it.
+step1_cv_harness/outputs/*/*.pth
