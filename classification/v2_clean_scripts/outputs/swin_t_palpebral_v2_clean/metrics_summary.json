@@ -1,0 +1,21 @@
+{
+  "model_name": "swin_t_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 3,
+  "f1": 0.8484848484848485,
+  "accuracy": 0.8484848484848485,
+  "recall": 1.0,
+  "precision": 0.7368421052631579,
+  "specificity": 0.7368421052631579,
+  "balanced_accuracy": 0.868421052631579,
+  "auc_overall": 0.8909774436090226,
+  "auc_india": 0.85,
+  "auc_italy": 0.9,
+  "india_italy_auc_gap": 0.050000000000000044,
+  "best_params": {
+    "learning_rate": 0.03142880890840111,
+    "weight_decay": 4.335281794951567e-06,
+    "dropout_rate": 0.5
+  },
+  "timestamp_utc": "2026-08-02T16:01:00.651552+00:00"
+}

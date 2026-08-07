@@ -1,0 +1,21 @@
+{
+  "model_name": "vit_l_16_forniceal_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 9,
+  "f1": 0.8275862068965517,
+  "accuracy": 0.8387096774193549,
+  "recall": 0.8571428571428571,
+  "precision": 0.8,
+  "specificity": 0.8235294117647058,
+  "balanced_accuracy": 0.8403361344537814,
+  "auc_overall": 0.8109243697478992,
+  "auc_india": 0.7,
+  "auc_italy": 0.9230769230769231,
+  "india_italy_auc_gap": 0.22307692307692317,
+  "best_params": {
+    "learning_rate": 0.004252633199345978,
+    "weight_decay": 2.0094111846413368e-05,
+    "dropout_rate": 0.2
+  },
+  "timestamp_utc": "2026-08-02T20:14:26.957092+00:00"
+}

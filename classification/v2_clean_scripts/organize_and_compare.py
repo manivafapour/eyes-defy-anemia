@@ -178,7 +178,7 @@ def build_comparison(outputs_dir: Path, all_metrics: list) -> None:
     best_conf = df.loc[df["india_italy_auc_gap"].idxmin()] if df["india_italy_auc_gap"].notna().any() else None
 
     lines = [
-        "# CNN Batch -- Model Comparison (clean data, _v2_clean)",
+        "# Full 18-Combo Model Comparison (clean data, _v2_clean)",
         "",
         f"{len(df)} combos compared, sorted by overall validation F1 (descending).",
         "",

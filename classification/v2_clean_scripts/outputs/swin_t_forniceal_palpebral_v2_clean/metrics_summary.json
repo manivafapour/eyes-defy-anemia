@@ -1,0 +1,21 @@
+{
+  "model_name": "swin_t_forniceal_palpebral_v2_clean",
+  "n_trials_run": 12,
+  "best_trial_number": 6,
+  "f1": 0.8275862068965517,
+  "accuracy": 0.8387096774193549,
+  "recall": 0.8571428571428571,
+  "precision": 0.8,
+  "specificity": 0.8235294117647058,
+  "balanced_accuracy": 0.8403361344537814,
+  "auc_overall": 0.819327731092437,
+  "auc_india": 0.6500000000000001,
+  "auc_italy": 0.9615384615384616,
+  "india_italy_auc_gap": 0.31153846153846143,
+  "best_params": {
+    "learning_rate": 0.06264278041381323,
+    "weight_decay": 3.218056412620644e-05,
+    "dropout_rate": 0.2
+  },
+  "timestamp_utc": "2026-08-02T16:13:05.760578+00:00"
+}
