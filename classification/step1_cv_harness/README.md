@@ -89,15 +89,39 @@ with different `--folds/--repeats/--seed` cannot silently skip the geometry that
 
 ## Execution — Kaggle
 
-Notebook: `classification/Kaggle-Notebook/step1-cv-harness.ipynb`
+**Two notebooks, run separately, results merged locally afterward:**
 
-1. Push this module to GitHub first — the notebook's `git clone` needs it there.
-2. Run cell 4 (`/kaggle/input` listing) and confirm cell 7's `SRC_DIR` matches the real mount path.
+| Notebook | Combos | Output zip |
+|---|---|---|
+| `classification/Kaggle-Notebook/step1-cv-harness-cnn.ipynb` | 12 CNNs | `step1_cv_results_cnn.zip` |
+| `classification/Kaggle-Notebook/step1-cv-harness-vit.ipynb` | 6 transformers (`swin_t`, `vit_b_16`, `vit_l_16` × 2 tissue types) | `step1_cv_results_vit.zip` |
+
+Split by architecture family for the same reason the original v2_clean training was split this way
+(`classification-cnn-clean.ipynb` / `classification-vit-clean.ipynb`): the transformer roster, especially
+`vit_l_16` at 304.33M frozen backbone parameters, is far more compute-expensive per fit — even with the
+backbone frozen, every one of the 25 fits still pays the full forward-pass cost through the whole network.
+The ViT notebook is very likely the single most expensive run in this project to date.
+
+**The label-shuffle negative control (checkpoint 5) runs only in the CNN notebook**, against
+`mobilenet_v3_small_palpebral_v2_clean`. It is not architecture-specific — it tests the harness's fold
+construction and pooling logic, which is identical regardless of which model runs through it — so it is
+not duplicated in the ViT notebook.
+
+Steps, per notebook:
+
+1. Push this module to GitHub first — each notebook's `git clone` needs it there.
+2. Run cell 4 (`/kaggle/input` listing) and confirm the data-copy cell's `SRC_DIR` matches the real mount path.
 3. Save Version → Save & Run All. `sync_outputs()` runs after every combo, so an interrupted session
    still yields a complete zip of what finished.
-4. Download `/kaggle/working/step1_cv_results.zip`.
+4. Download the notebook's output zip.
 
-Budget fallback if the session is tight: add `--repeats 3` to the training cells.
+Budget fallback if a session is tight: add `--repeats 3` to that notebook's training cells.
+
+**After both notebooks finish:** extract both zips' `outputs/` into the same local
+`classification/step1_cv_harness/outputs/`, then run `aggregate_baseline.py` once locally. Combo
+discovery is dynamic (globs `outputs/*/cv_metrics.json`), so no code change is needed to go from a
+12- or 6-combo partial baseline to the full 18-combo one — and only the merged run will show gate 5
+passing, since the control only exists in the CNN notebook's output.
 
 ## Execution — local
 

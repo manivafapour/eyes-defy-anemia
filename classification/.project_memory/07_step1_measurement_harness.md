@@ -135,9 +135,21 @@ Checkpoints 1–4 are **re-run inside `run_cv_harness.py` immediately before tra
 
 Every later intervention **must** reuse the fold assignments persisted in each combo's `fold_manifest.json`, then compare against the frozen baseline with `cv_stats.paired_delta_auc()` — **not** by checking whether two independent CIs overlap. Per the table above, with 23 India-healthy patients the unpaired comparison cannot detect a realistic intervention effect. This is why fold assignments are returned and persisted as data rather than being a side effect.
 
-## 10. Not yet done
+## 10. Split into two Kaggle notebooks (2026-08-06)
 
-- **The real 12-combo run has not been executed.** Cheapest-architecture-first ordering, one combo per notebook cell, `sync_outputs()` after each. Budget fallback: `--repeats 3`.
-- Gates 5 (at full scale), 7, and 8 are untested against production numbers. **Step 2 must not start until `aggregate_baseline.py` reports Step 1 clear.**
-- The 6 transformer combos are absent because the ViT batch (`classification-vit-clean.ipynb`) still has not run — `discover_combos()` picks them up automatically once their study summaries exist, no code change needed.
+Project-author decision: run the real Step 1 measurements as **two separate notebooks**, one per architecture family, mirroring how `classification-cnn-clean.ipynb`/`classification-vit-clean.ipynb` split the original v2_clean training — the ViT roster (`vit_l_16` = 304.33M frozen backbone params) is far more compute-expensive per fit even with the backbone frozen, since every fit still pays the full forward-pass cost through the network 25 times.
+
+**Prerequisite done first: the ViT/Swin v2_clean batch results were organized and committed.** They had already been placed into per-combo folders locally (9 files each, matching the CNN combo structure — checkpoint, study summary, trials CSV, 4 plots, metrics summary) and `model_comparison/comparison_table.csv` already correctly reflected all 18 combos, but none of it had been committed. Verified complete (file counts, a spot-checked metrics value against its own combo's row) and committed. 36 leftover duplicate files (a flat `logs/`/`plots/` extraction remnant plus `.rar` archives of them) were byte-compared against the organized combo folders — confirmed identical — and deleted.
+
+| Notebook | Combos | Output zip |
+|---|---|---|
+| `step1-cv-harness-cnn.ipynb` (renamed from `step1-cv-harness.ipynb`) | 12 CNNs | `step1_cv_results_cnn.zip` |
+| `step1-cv-harness-vit.ipynb` (new) | 6 transformers | `step1_cv_results_vit.zip` |
+
+The negative control (checkpoint 5) lives **only** in the CNN notebook — it tests fold construction and pooling, not architecture-specific behavior, so it isn't duplicated. Both notebooks' `aggregate_baseline.py` cell produces a valid *partial* baseline (12-combo or 6-combo) when run standalone; the CNN notebook's own aggregate step will show gate 5 passing (its own control), the ViT notebook's will correctly show gate 5 failing with `n_controls_run: 0` until merged. **The real 18-combo baseline requires extracting both zips' `outputs/` into the same local `classification/step1_cv_harness/outputs/` and running `aggregate_baseline.py` once** — combo discovery is dynamic, so no code change is needed for that step.
+
+## 11. Not yet done
+
+- **Neither notebook has been run yet.** Cheapest-architecture-first ordering within each, one combo per cell, `sync_outputs()` after each. Budget fallback: `--repeats 3`.
+- Gates 5 (at full scale), 7, and 8 are untested against production numbers. **Step 2 must not start until the merged, 18-combo `aggregate_baseline.py` run reports Step 1 clear.**
 - Grad-CAM itself is **not** part of Step 1. The conclusion from the design discussion: with a frozen backbone and a `GAP → Dropout → Linear` head, Grad-CAM degenerates to exact CAM (channel weights *are* the learned head weights) — mathematically exact, but **spatially resolved and cue-blind**. A colour/illumination shortcut appears as a channel reweighting, not a spatial displacement, so a perfect Grad-CAM result is fully compatible with a total colour shortcut. Inputs are already tissue-isolated crops on black, so "does it look at the conjunctiva?" is largely answered by construction. Grad-CAM is therefore demoted to a qualitative supporting exhibit; Steps 2–4 carry the quantitative argument.
