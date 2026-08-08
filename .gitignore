@@ -19,6 +19,13 @@ Source/
 archive.zip
 dataset anemia/
 
+# Locally-kept full-output backups of the notebooks/*_full_visual_audit.ipynb
+# review notebooks (each 90MB+ once actually run, with embedded per-patient
+# image overlays) -- the tracked notebook files themselves are always kept
+# output-stripped/clean; these backups exist purely so a personal review run
+# isn't lost, and must never be swept into a commit.
+Segmentation/notebooks/*_executed_backup.ipynb
+
 # Processed image/mask outputs (large binaries, regenerable from archive.zip)
 Segmentation/data/processed/images/
 Segmentation/data/processed/masks/
@@ -53,6 +60,7 @@ folder_map.txt
 folder_map_utf8.txt
 Segmentation/data/processed/eyes_processed_data.zip
 Segmentation/data/processed/aligned_raw.zip
+Segmentation/data/processed/aligned_raw_forniceal.zip
 
 # Trained model checkpoints (large binaries, regenerable by retraining;
 # outputs/logs/ metrics CSV/JSON are NOT ignored -- those are small and
