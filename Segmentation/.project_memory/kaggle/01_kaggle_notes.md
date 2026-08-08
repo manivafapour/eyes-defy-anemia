@@ -43,7 +43,40 @@ Pass the dataset's own mount root (one level *above* the doubly-nested `aligned_
 
 All three fixes committed and pushed (commits `de8e3b2`, `c03397e`) before the project author's second real attempt, which is what produced the confirmed working paths recorded above.
 
+## Second, distinct placeholder bug: confirmed paths were documented but never applied to the notebook itself (2026-08-08)
+
+Despite the real mount paths being confirmed and recorded above, the project author's actual first "Run All" attempt on Kaggle still hit the exact same class of error:
+
+```
+FileNotFoundError: Could not find aligned_raw/, images+masks/, or aligned_raw.zip under
+/kaggle/input/REPLACE_WITH_ACTUAL_PATH_FROM_LISTING_ABOVE -- run the /kaggle/input listing
+cell above and check what's actually there.
+```
+
+**Root cause, distinct from the first bug above:** the committed notebook's dataset-path cell had never actually been edited to use the confirmed values — they existed only as prose in this memory file, not in the executable cell itself, which still shipped with the literal `REPLACE_WITH_ACTUAL_PATH_FROM_LISTING_ABOVE` placeholder. Not a new path-discovery problem; a gap between "we recorded the answer" and "the artifact that runs was updated with it."
+
+**Fix:** the cell now hardcodes the confirmed values directly as the default, for this project author's Kaggle account, rather than leaving a placeholder that must be manually edited every time the notebook is opened:
+```python
+ALIGNED_RAW_DATASET_DIR = "/kaggle/input/datasets/manivafapour21/aligned-raw"
+ALIGNED_RAW_FORNICEAL_DATASET_DIR = "/kaggle/input/datasets/manivafapour21/aligned-raw-forniceal"
+```
+`Segmentation/Kaggle-Notebook/segmentation-pretrained-sweep.ipynb`, committed `691cb7a`, pushed. A comment in the cell notes these are confirmed-for-this-account values and to re-run the `print_tree()` listing cell and update them if the datasets are ever re-attached under a different username/slug.
+
+Note this fix updates the **repo copy** of the notebook only — a live Kaggle notebook is a separate, independently-edited copy that does not pick up a GitHub change automatically. The project author applied the same two lines directly in their live Kaggle session to unblock the run in progress.
+
+## Confirmed via real Kaggle execution, first time this notebook has actually run (2026-08-08)
+
+After the fix above, the project author's data-staging cell succeeded end-to-end on real Kaggle infrastructure:
+
+```
+aligned_raw: 201 images, 201 masks staged at Segmentation/data/processed/aligned_raw
+aligned_raw_forniceal: 211 images, 211 masks staged at Segmentation/data/processed/aligned_raw_forniceal
+```
+
+These counts match exactly the locally-verified alignment totals (201/217 palpebral successes, 211/217 forniceal_palpebral successes — `CLAUDE.md` §1.4.2/§1.4.4 and `04_pretrained_architecture_sweep.md`'s forniceal section) — real confirmation the correct files reached Kaggle, not just a non-error. This is the first time any part of this notebook has been confirmed running on actual Kaggle hardware, as opposed to structural/local-only verification.
+
 ## Still open
 
+- Whether the combined sanity-check cell (pip install of the 4 heavy new packages, 9-model registry import, one real dataloader batch per tissue type) succeeds on real Kaggle hardware — this is the next cell the project author was told to run; not yet confirmed as of this entry.
 - Whether the training scripts themselves run cleanly end-to-end on Kaggle's T4×2 (data staging is now confirmed working; no training has been confirmed successful yet as of this entry).
 - Whether the Strong-tier combos (Swin-Large at 512×512, batch_size=16) fit in the T4's 16GB — flagged as a watch-item in the notebook itself (`04_pretrained_architecture_sweep.md`'s hardware-constraint note), not yet confirmed either way on real Kaggle hardware.
