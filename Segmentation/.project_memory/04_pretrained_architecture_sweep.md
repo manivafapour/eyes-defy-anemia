@@ -78,6 +78,15 @@ Original metric set was Dice + IoU only. Project author asked for a broader set 
 
 **Not yet done:** `compare_models_significance.py` has only been exercised against dry-run (1-epoch) data — its real use (comparing actual trained models) waits on real Kaggle results existing.
 
+## Real Kaggle run hit a data-staging bug (2026-08-08) — notebook fixed
+Project author's first actual attempt to run `segmentation-pretrained-sweep.ipynb` on Kaggle crashed at the data-staging cell with `FileNotFoundError`. Two distinct causes, both fixed:
+1. **Immediate cause:** the placeholder string (`/kaggle/input/REPLACE_WITH_ACTUAL_PATH_FROM_LISTING_ABOVE`) was never replaced with the real path from the `/kaggle/input` listing cell.
+2. **Real design gap:** the notebook assumed the two zips would be uploaded as ONE combined Kaggle dataset (`KAGGLE_DATASET_DIR`). The project author instead attached them as **two separate Kaggle datasets** (`aligned_raw`, `aligned_raw_forniceal`, confirmed via a screenshot of the notebook's Input panel) — these mount at two different `/kaggle/input/...` paths, which a single shared directory variable can't represent.
+
+**Fix:** replaced the single `KAGGLE_DATASET_DIR` with `ALIGNED_RAW_DATASET_DIR` / `ALIGNED_RAW_FORNICEAL_DATASET_DIR` (works whether set to the same path for one combined dataset, or two different paths for two separate ones). `stage_tissue_data()` now tries **three** possible layouts per dataset, not two: (1) `dataset_dir/{name}/images,masks/` — the zip's own internal folder prefix preserved, (2) `dataset_dir/images,masks/` directly — Kaggle flattened it, (3) `dataset_dir/{name}.zip` — never auto-extracted. Verified all three branches locally against the real `aligned_raw.zip` contents (built 3 fake dataset directories matching each layout, confirmed all three correctly stage 201 images + 201 masks) before considering this fixed, not just reasoned through.
+
+**Not yet pushed** — fix is local only as of this entry; project author will decide when to commit/push and re-run on Kaggle.
+
 ## Plots added; Kaggle output now weights + plots + values, one downloadable zip (2026-08-08, project author's explicit request)
 Until now `trainer_engine.py` only ever wrote raw numbers (JSON/CSV) — no charts at all. New `Segmentation/scripts/segmentation_plots.py`, called once at the end of every `run_study()` (inside `_save_outputs()`), writes 5 PNGs per model to the new `Segmentation/outputs/plots/` directory (tracked in git, not gitignored — same convention as `outputs/logs/`, nothing in `.gitignore` needed changing since no existing pattern would have caught this new folder):
 
