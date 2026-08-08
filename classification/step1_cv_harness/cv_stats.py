@@ -34,7 +34,15 @@ effect; the paired one is the only version with a chance of clearing.
 """
 
 import numpy as np
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    roc_curve,
+)
 
 from cv_config import CI_ALPHA, COUNTRIES, N_BOOTSTRAP, SEED
 
@@ -47,6 +55,54 @@ def safe_auc(labels: np.ndarray, probs: np.ndarray):
     if labels.size == 0 or len(np.unique(labels)) < 2:
         return None
     return float(roc_auc_score(labels, np.asarray(probs)))
+
+
+def fold_level_metrics(labels: np.ndarray, probs: np.ndarray, threshold: float = 0.5) -> dict:
+    """Full metric set for ONE fold's own held-out predictions (~37 patients) --
+    confusion matrix, ROC curve, and the same accuracy/precision/recall/
+    specificity/balanced_accuracy/f1/auc set datapreparepipeline/
+    trainer_engine.py's compute_metrics() reports elsewhere in this project,
+    kept field-for-field comparable rather than inventing a parallel schema.
+
+    This is a per-fold diagnostic (feeds the loss-curve/confusion-matrix/ROC
+    grids in cv_plots.py), NOT the pooled statistic bootstrap_auc_cis()
+    computes above -- a single fold's ~37 patients is exactly the small-N
+    regime this whole harness exists to move away from as the headline
+    number, so these values are for visual per-fold inspection, not for
+    citing as "the" result.
+
+    None (not 0.0) for specificity/auc/roc_curve when undefined on this
+    fold's slice (e.g. a fold with zero true negatives, or only one class
+    present) -- never silently misread as a real zero.
+    """
+    labels = np.asarray(labels)
+    probs = np.asarray(probs)
+    n = len(labels)
+    if n == 0:
+        return {"n": 0}
+    preds = (probs > threshold).astype(float)
+    cm = confusion_matrix(labels, preds, labels=[0, 1])
+    tn, fp, fn, tp = cm.ravel()
+    recall = float(recall_score(labels, preds, zero_division=0))
+    specificity = float(tn / (tn + fp)) if (tn + fp) > 0 else None
+    out = {
+        "n": int(n),
+        "accuracy": float(accuracy_score(labels, preds)),
+        "precision": float(precision_score(labels, preds, zero_division=0)),
+        "recall": recall,
+        "specificity": specificity,
+        "balanced_accuracy": float((recall + specificity) / 2) if specificity is not None else None,
+        "f1": float(f1_score(labels, preds, zero_division=0)),
+        "confusion_matrix": cm.tolist(),
+    }
+    auc = safe_auc(labels, probs)
+    out["auc"] = auc
+    if auc is not None:
+        fpr, tpr, _thresholds = roc_curve(labels, probs)
+        out["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
+    else:
+        out["roc_curve"] = None
+    return out
 
 
 def auc_by_country(labels: np.ndarray, probs: np.ndarray, countries: np.ndarray) -> dict:

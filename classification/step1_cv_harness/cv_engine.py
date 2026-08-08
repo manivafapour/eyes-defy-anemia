@@ -3,9 +3,12 @@ Step 1 -- Measurement Harness: per-fold training and out-of-fold prediction.
 
 Deliberately minimal compared with the live trainer_engine.py: no Optuna (the
 hyperparameters are locked to each combo's own winning trial), no checkpoint
-writing, no plots. The only artifact Step 1 needs is one held-out probability
-per patient per repeat; everything else would be output volume that nothing
-downstream reads.
+writing. Unlike the original design, this DOES now track per-epoch loss
+history per fold (added after the first CNN run made clear that visual,
+per-fold diagnostics -- loss curves, confusion matrices, ROC curves -- were
+wanted alongside the pooled statistics). The history is cheap (a couple of
+Python floats appended per epoch); saving/plotting it lives in
+run_cv_harness.py / cv_plots.py, not here.
 
 The model built here is bit-identical to the one v2_clean trained -- same
 frozen ImageNet backbone, same Dropout -> Linear head, same BCEWithLogitsLoss
@@ -148,10 +151,14 @@ def run_fold(pool_df, fold: dict, combo: dict, base_seed: int, verbose: bool = T
     best_state = None
     best_epoch = 0
     epochs_without_improvement = 0
+    train_loss_history = []
+    inner_val_loss_history = []
 
     for epoch in range(1, MAX_EPOCHS + 1):
         train_loss = train_one_epoch(model, loaders["inner_train"], optimizer, criterion, DEVICE)
         inner = predict(model, loaders["inner_val"], criterion, DEVICE)
+        train_loss_history.append(float(train_loss))
+        inner_val_loss_history.append(float(inner["loss"]))
         if inner["loss"] < best_inner_loss:
             best_inner_loss = inner["loss"]
             best_state = _mutable_state(model)
@@ -184,6 +191,8 @@ def run_fold(pool_df, fold: dict, combo: dict, base_seed: int, verbose: bool = T
         "n_epochs_run": epoch,
         "best_inner_epoch": best_epoch,
         "best_inner_loss": float(best_inner_loss),
+        "train_loss_history": train_loss_history,
+        "inner_val_loss_history": inner_val_loss_history,
         "patient_ids": outer["patient_ids"],
         "probs": outer["probs"],
         "labels": outer["labels"],

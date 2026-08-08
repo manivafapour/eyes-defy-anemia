@@ -31,6 +31,34 @@ key, with predictions pooled out-of-fold:
 | Pooled out-of-fold (palpebral) | **1,311** (57 × 23) | **1,680** (20 × 84) |
 | Pooled out-of-fold (forniceal_palpebral) | **1,311** (57 × 23) | **1,501** (19 × 79) |
 
+## Per-combo artifacts (`outputs/{combo}/`)
+
+The pooled statistic (`cv_metrics.json`, `oof_predictions.csv`) was the original, deliberately lean
+design. Added after the first CNN run made clear that per-fold visual diagnostics were also wanted:
+
+| File | Contents |
+|---|---|
+| `fold_metrics.csv` | One row per (repeat, fold): accuracy/precision/recall/specificity/balanced_accuracy/F1/AUC, computed on that fold's own ~37-patient held-out set (not the pooled 184) |
+| `fold_diagnostics.json` | The raw per-fold loss histories + confusion matrices + ROC curves behind the plots below |
+| `plots/{combo}_loss_curves_grid.png` | Train vs. inner-validation loss, one subplot per fold, laid out as an n_repeats × n_splits grid so every fold is visible in one image |
+| `plots/{combo}_confusion_matrices_grid.png` | Same grid layout, one confusion matrix per fold |
+| `plots/{combo}_roc_curves_grid.png` | Same grid layout, one ROC curve (with AUC) per fold |
+| `plots/{combo}_fold_metrics_summary.png` | AUC/F1/Balanced Accuracy plotted across all (repeat, fold) units in one chart, for at-a-glance fold-to-fold consistency |
+
+**These are per-fold diagnostics, not the headline number.** Each fold's own held-out set is only
+~37 patients — exactly the small-N regime this harness exists to move away from as the *reported*
+result. Use them to sanity-check individual folds (e.g. spot a fold that collapsed), not to cite a
+per-fold AUC as "the" result — that's what the pooled `cv_metrics.json` is for.
+
+Still **no model checkpoints** — Step 1 needs predictions and diagnostics, not weights.
+
+## Cross-combo comparison (`outputs/comparison/`)
+
+Written by `aggregate_baseline.py` alongside `outputs/baseline/`, as a separate folder:
+
+- `country_auc_comparison.png` — India/Italy/overall pooled AUC, one bar per combo, 95% bootstrap CI whiskers, all three panels sorted by India AUC for cross-reference.
+- `india_italy_gap_comparison.png` — the India−Italy AUC gap per combo with its own CI, green where the CI excludes 0.
+
 All 6 patients lacking a forniceal crop are Italy, so the India cells are identical across tissue types.
 
 **Honest limit:** 23 India-healthy patients is irreducible without new data. Expect a CI half-width
@@ -45,11 +73,12 @@ make 0.05 detectable. The gate is set accordingly.
 |---|---|
 | `cv_config.py` | Design constants, gate thresholds, combo discovery + locked hyperparameters |
 | `cv_data.py` | Pool construction, fold building, label-shuffle control, dataset |
-| `cv_engine.py` | Per-fold training and out-of-fold prediction |
-| `cv_stats.py` | AUC, bootstrap CIs, and `paired_delta_auc()` for Steps 3–5 |
+| `cv_engine.py` | Per-fold training and out-of-fold prediction — also tracks per-epoch loss history |
+| `cv_stats.py` | Pooled AUC + bootstrap CIs, `paired_delta_auc()` for Steps 3–5, and `fold_level_metrics()` (per-fold confusion matrix/ROC/full metric set) |
+| `cv_plots.py` | All plotting — per-combo fold grids, and cross-combo comparison charts |
 | `validate_harness.py` | Structural verification (checkpoints 1–4, 6) — trains nothing |
 | `run_cv_harness.py` | Runner, one combo per invocation |
-| `aggregate_baseline.py` | Gate evaluation (5, 7, 8) and the frozen baseline artifact (9) |
+| `aggregate_baseline.py` | Gate evaluation (5, 7, 8), the frozen baseline artifact (9), and cross-combo comparison plots |
 
 The live pipeline's architecture builders and transforms are **imported**, not copied, so the models
 measured here are bit-identical to the ones v2_clean trained. The deprecated

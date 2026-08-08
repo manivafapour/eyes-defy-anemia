@@ -15,9 +15,19 @@ Usage:
     python classification/step1_cv_harness/run_cv_harness.py --combo <name> --repeats 3   # budget mode
 
 Writes, per combo, to outputs/{combo}/:
-    oof_predictions.csv   one held-out probability per patient per repeat
-    fold_manifest.json    fold assignments + structural check results
-    cv_metrics.json       pooled per-repeat AUCs, bootstrap CIs, gate results
+    oof_predictions.csv     one held-out probability per patient per repeat
+    fold_manifest.json      fold assignments + structural check results
+    cv_metrics.json         pooled per-repeat AUCs, bootstrap CIs, gate results
+    fold_metrics.csv        per-fold (own held-out set) accuracy/precision/recall/
+                             specificity/balanced_accuracy/f1/auc -- one row per
+                             (repeat, fold)
+    fold_diagnostics.json   per-fold loss histories + confusion matrix + ROC curve
+                             (the raw numbers behind the plots below)
+    plots/{combo}_loss_curves_grid.png          train vs inner-val loss, one
+                                                 subplot per fold, single image
+    plots/{combo}_confusion_matrices_grid.png   confusion matrix per fold, single image
+    plots/{combo}_roc_curves_grid.png           ROC curve per fold, single image
+    plots/{combo}_fold_metrics_summary.png      AUC/F1/Balanced Accuracy across all folds
 
 No model checkpoints are written -- see cv_config.py, deviation 2.
 """
@@ -44,7 +54,13 @@ from cv_config import (  # noqa: E402
 )
 from cv_data import build_folds, load_held_out, load_pool, pool_composition, shuffle_labels  # noqa: E402
 from cv_engine import DEVICE, run_fold  # noqa: E402
-from cv_stats import bootstrap_auc_cis  # noqa: E402
+from cv_plots import (  # noqa: E402
+    plot_confusion_matrices_grid,
+    plot_fold_metrics_summary,
+    plot_loss_curves_grid,
+    plot_roc_curves_grid,
+)
+from cv_stats import bootstrap_auc_cis, fold_level_metrics  # noqa: E402
 from validate_harness import (  # noqa: E402
     check_1_test_isolation,
     check_2_partition_integrity,
@@ -135,9 +151,12 @@ def run_combo(
     print(f"\n  Training {len(folds)} fits ({n_repeats} repeats x {n_splits} folds):")
     rows = []
     fold_log = []
+    histories = {}          # (repeat, fold) -> {"train_loss": [...], "inner_val_loss": [...]}
+    per_fold_metrics = {}   # (repeat, fold) -> cv_stats.fold_level_metrics(...) on that fold's own held-out set
     t0 = time.time()
     for i, fold in enumerate(folds, 1):
         result = run_fold(pool_df, fold, combo, base_seed=seed)
+        key = (result["repeat"], result["fold"])
         for pid, prob, label, country in zip(
             result["patient_ids"], result["probs"], result["labels"], result["countries"]
         ):
@@ -154,6 +173,13 @@ def run_combo(
         fold_log.append(
             {k: result[k] for k in ("repeat", "fold", "n_epochs_run", "best_inner_epoch", "best_inner_loss")}
         )
+        histories[key] = {
+            "train_loss": result["train_loss_history"],
+            "inner_val_loss": result["inner_val_loss_history"],
+        }
+        # Own held-out set only (~37 patients) -- a per-fold diagnostic, not the
+        # pooled headline statistic bootstrap_auc_cis() computes below.
+        per_fold_metrics[key] = fold_level_metrics(result["labels"], result["probs"])
         if i % n_splits == 0:
             print(f"    -- repeat {result['repeat']} complete ({i}/{len(folds)} fits, "
                   f"{time.time() - t0:.0f}s elapsed)", flush=True)
@@ -161,6 +187,43 @@ def run_combo(
     pred_df = pd.DataFrame(rows)
     pred_path = combo_dir / "oof_predictions.csv"
     pred_df.to_csv(pred_path, index=False)
+
+    # --- Per-fold diagnostics: table + raw numbers + plots -------------------
+    fold_metrics_rows = []
+    for (r, f), m in sorted(per_fold_metrics.items()):
+        row = {"repeat": r, "fold": f}
+        row.update({k: m.get(k) for k in
+                     ("n", "accuracy", "precision", "recall", "specificity", "balanced_accuracy", "f1", "auc")})
+        fold_metrics_rows.append(row)
+    fold_metrics_df = pd.DataFrame(fold_metrics_rows)
+    fold_metrics_path = combo_dir / "fold_metrics.csv"
+    fold_metrics_df.to_csv(fold_metrics_path, index=False)
+
+    diagnostics_path = combo_dir / "fold_diagnostics.json"
+    with open(diagnostics_path, "w") as f:
+        json.dump(
+            {
+                "histories": {f"r{r}f{fo}": v for (r, fo), v in histories.items()},
+                "per_fold_metrics": {f"r{r}f{fo}": v for (r, fo), v in per_fold_metrics.items()},
+            },
+            f,
+            indent=2,
+        )
+
+    plots_dir = combo_dir / "plots"
+    plots_dir.mkdir(exist_ok=True)
+    plot_paths = {
+        "loss_curves_grid": plot_loss_curves_grid(tag, histories, plots_dir / f"{tag}_loss_curves_grid.png"),
+        "confusion_matrices_grid": plot_confusion_matrices_grid(
+            tag, per_fold_metrics, plots_dir / f"{tag}_confusion_matrices_grid.png"
+        ),
+        "roc_curves_grid": plot_roc_curves_grid(tag, per_fold_metrics, plots_dir / f"{tag}_roc_curves_grid.png"),
+        "fold_metrics_summary": plot_fold_metrics_summary(
+            tag, fold_metrics_df, plots_dir / f"{tag}_fold_metrics_summary.png"
+        ),
+    }
+    print(f"    saved per-fold diagnostics -> {fold_metrics_path.name}, {diagnostics_path.name}")
+    print(f"    saved plots -> {list(p.split('/')[-1] for p in plot_paths.values())}")
 
     per_repeat = _pooled_per_repeat(pred_df)
     stats = bootstrap_auc_cis(per_repeat, n_bootstrap=n_bootstrap, seed=seed)
@@ -180,6 +243,7 @@ def run_combo(
         "pool_composition": pool_composition(pool_df),
         "auc": stats,
         "fold_log": fold_log,
+        "plot_paths": plot_paths,
         "runtime_seconds": round(time.time() - t0, 1),
         "gates": {
             "precision_india_ci_half_width": {

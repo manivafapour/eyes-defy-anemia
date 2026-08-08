@@ -70,6 +70,7 @@ V2_CLEAN_OUTPUTS_DIR = MODULE_ROOT / "v2_clean_scripts" / "outputs"
 
 OUTPUTS_DIR = HARNESS_DIR / "outputs"
 BASELINE_DIR = OUTPUTS_DIR / "baseline"
+COMPARISON_DIR = OUTPUTS_DIR / "comparison"  # cross-combo comparison plots, written by aggregate_baseline.py
 
 # --------------------------------------------------------------------------
 # Cross-validation design

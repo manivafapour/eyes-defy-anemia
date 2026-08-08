@@ -148,8 +148,26 @@ Project-author decision: run the real Step 1 measurements as **two separate note
 
 The negative control (checkpoint 5) lives **only** in the CNN notebook — it tests fold construction and pooling, not architecture-specific behavior, so it isn't duplicated. Both notebooks' `aggregate_baseline.py` cell produces a valid *partial* baseline (12-combo or 6-combo) when run standalone; the CNN notebook's own aggregate step will show gate 5 passing (its own control), the ViT notebook's will correctly show gate 5 failing with `n_controls_run: 0` until merged. **The real 18-combo baseline requires extracting both zips' `outputs/` into the same local `classification/step1_cv_harness/outputs/` and running `aggregate_baseline.py` once** — combo discovery is dynamic, so no code change is needed for that step.
 
-## 11. Not yet done
+## 11. CNN notebook run once (2026-08-08); design gap found; harness extended and requires a re-run
 
-- **Neither notebook has been run yet.** Cheapest-architecture-first ordering within each, one combo per cell, `sync_outputs()` after each. Budget fallback: `--repeats 3`.
+The CNN notebook (`step1-cv-harness-cnn.ipynb`) was run for real on Kaggle and completed (~4h45m, 11:11→15:57) — 12 combos + the within-country/global negative controls, downloaded to `classification/v2_clean_scripts/outputs/Kfold_output/CNN/`. This is the first real production run of the harness.
+
+**Gap found on inspection:** the project author asked to see, per model, a loss curve and confusion matrix per fold, plus an overall-evaluation view and a cross-combo comparison folder — none of which existed. The original design (`cv_config.py`, deviation 2) deliberately saved *only* `oof_predictions.csv`/`cv_metrics.json`/`fold_manifest.json` — no plots, and critically, **no per-epoch loss history was ever recorded**: `cv_engine.py`'s training loop computed a fresh train/val loss every epoch but only ever compared it against the running best, discarding each epoch's value immediately. This is not reconstructable after the fact from what was already downloaded — the CNN run's results do not contain it.
+
+**Harness extended, verified via local dry run, not yet re-run for real:**
+- `cv_engine.py`: `run_fold()` now appends every epoch's train loss and inner-validation loss to two history lists and returns them (cheap — a couple of floats per epoch).
+- `cv_stats.py`: new `fold_level_metrics()` — confusion matrix, ROC curve, and the full accuracy/precision/recall/specificity/balanced_accuracy/F1/AUC set, computed on **one fold's own ~37-patient held-out set** (a per-fold diagnostic, explicitly not the pooled headline statistic `bootstrap_auc_cis()` already computes).
+- New `cv_plots.py` — all plotting, kept separate from the numeric modules. Four per-combo grid plots (loss curves, confusion matrices, ROC curves, all laid out as an n_repeats×n_splits grid so every fold is visible in one image, plus a fold-metrics-summary line chart) and two cross-combo comparison plots (country AUC with CI whiskers, India/Italy gap with CI whiskers).
+- `run_cv_harness.py`: collects histories + per-fold metrics during the training loop, saves `fold_metrics.csv` + `fold_diagnostics.json` per combo, calls the four plotting functions into `outputs/{combo}/plots/`.
+- `aggregate_baseline.py`: writes a new `outputs/comparison/` folder (sibling to `outputs/baseline/`, per explicit request to keep it separate) with the two cross-combo plots, built from the merged baseline DataFrame.
+- Both notebooks' "Done" markdown updated to describe the new artifacts; no notebook *code* cells needed changes, since they invoke the harness scripts generically and the new outputs are picked up automatically.
+
+**Verified before calling it done:** a local dry run (2 combos, `MAX_EPOCHS` monkey-patched to 3, 2 repeats) ran the full path end-to-end with zero errors, and all 6 plot types (4 per-combo × 2 combos, plus 2 comparison plots) were visually inspected, not just checked for file existence — confirmed correct labeling, correct per-fold sample counts, AUC values on the ROC grid matching the confusion-matrix grid, and CI-whisker/pass-fail coloring rendering correctly on the comparison plots.
+
+**Consequence: the already-completed CNN run's local results are missing the new artifacts and must be regenerated.** Since the code change is in the shared `step1_cv_harness/` module (not notebook-specific), both notebooks will need a fresh Kaggle run — the CNN notebook because it already ran under the old code, the ViT notebook because it hasn't run at all yet and will now produce the richer output the first time.
+
+## 12. Not yet done
+
+- **Both notebooks need a (re-)run under the extended code.** Cheapest-architecture-first ordering within each, one combo per cell, `sync_outputs()` after each. Budget fallback: `--repeats 3`.
 - Gates 5 (at full scale), 7, and 8 are untested against production numbers. **Step 2 must not start until the merged, 18-combo `aggregate_baseline.py` run reports Step 1 clear.**
 - Grad-CAM itself is **not** part of Step 1. The conclusion from the design discussion: with a frozen backbone and a `GAP → Dropout → Linear` head, Grad-CAM degenerates to exact CAM (channel weights *are* the learned head weights) — mathematically exact, but **spatially resolved and cue-blind**. A colour/illumination shortcut appears as a channel reweighting, not a spatial displacement, so a perfect Grad-CAM result is fully compatible with a total colour shortcut. Inputs are already tissue-isolated crops on black, so "does it look at the conjunctiva?" is largely answered by construction. Grad-CAM is therefore demoted to a qualitative supporting exhibit; Steps 2–4 carry the quantitative argument.

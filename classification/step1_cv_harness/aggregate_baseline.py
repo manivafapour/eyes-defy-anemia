@@ -11,6 +11,11 @@ a paired comparison later.
 
 Fails loudly and refuses to declare Step 1 clear if any gate fails.
 
+Also writes outputs/comparison/ -- cross-combo plots (pooled India/Italy/
+overall AUC with bootstrap CI whiskers, and the India/Italy gap), separate
+from outputs/baseline/'s numeric artifact so the two "what changed" concerns
+(numbers vs. visualization) stay in their own files.
+
 Usage:
     python classification/step1_cv_harness/aggregate_baseline.py
 """
@@ -27,10 +32,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cv_config import (  # noqa: E402
     BASELINE_DIR,
+    COMPARISON_DIR,
     MAX_CI_HALF_WIDTH_INDIA_AUC,
     OUTPUTS_DIR,
     PLAUSIBILITY_RANGE_INDIA_AUC,
 )
+from cv_plots import plot_country_auc_comparison, plot_gap_comparison  # noqa: E402
 
 SINGLE_SPLIT_PAIRS = {"India": 40, "Italy": 60}
 
@@ -243,6 +250,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Aggregate Step 1 results and evaluate gates 5, 7, 8, 9.")
     parser.add_argument("--outputs-dir", type=Path, default=OUTPUTS_DIR)
     parser.add_argument("--baseline-dir", type=Path, default=BASELINE_DIR)
+    parser.add_argument("--comparison-dir", type=Path, default=COMPARISON_DIR)
     args = parser.parse_args()
 
     real, controls = _load_metrics(args.outputs_dir)
@@ -272,6 +280,12 @@ def main() -> int:
         json.dump({"meta": meta, "gates": gates, "combos": df.to_dict(orient="records")}, f, indent=2)
     write_markdown(df, gates, meta, md_path)
 
+    args.comparison_dir.mkdir(parents=True, exist_ok=True)
+    country_auc_path = args.comparison_dir / "country_auc_comparison.png"
+    gap_path = args.comparison_dir / "india_italy_gap_comparison.png"
+    plot_country_auc_comparison(df, country_auc_path)
+    plot_gap_comparison(df, gap_path)
+
     print(f"\n{'=' * 78}\nStep 1 baseline -- {len(df)} combos\n{'=' * 78}")
     print(df[["combo", "india_auc", "india_ci_half_width", "italy_auc", "gap"]].to_string(index=False))
     print("\nGates:")
@@ -280,6 +294,7 @@ def main() -> int:
         if not gate["passed"] and name == "5_negative_control" and gate["n_controls_run"] == 0:
             print("         -> run: run_cv_harness.py --combo <name> --shuffle-control within_country")
     print(f"\nWrote {csv_path}\n      {json_path}\n      {md_path}")
+    print(f"Wrote {country_auc_path}\n      {gap_path}")
 
     all_passed = all(g["passed"] for g in gates.values())
     print("\n" + ("STEP 1 CLEAR -- proceed to Step 2." if all_passed else "STEP 1 NOT CLEAR -- do not start Step 2."))
