@@ -13,7 +13,7 @@ Retraining the full 18-combo v2 architecture sweep (9 architectures × 2 tissue 
 
 ## Status
 
-**CNN batch (`classification-cnn-clean.ipynb`, 12 combos) — complete, results in.** ViT batch (`classification-vit-clean.ipynb`, 6 combos) — not yet run. This maps onto the project author's stated 3-phase roadmap (Phase 1: this 18-combo Optuna sweep → Phase 2: select top-2 CNN + top-2 transformer → Phase 3: 3-fold CV on the 4 champions) as: Phase 1 half-done.
+**Both batches complete — full 18-combo clean-data sweep done (2026-08-04).** `classification-cnn-clean.ipynb` (12 CNN combos) and `classification-vit-clean.ipynb` (6 transformer combos) have both been run on Kaggle, downloaded, organized, and merged into one comparison. This maps onto the project author's stated 3-phase roadmap (Phase 1: this 18-combo Optuna sweep → Phase 2: select top-2 CNN + top-2 transformer → Phase 3: 3-fold CV on the 4 champions) as: **Phase 1 complete, Phase 2 unblocked.**
 
 ## Naming reference (for when results start coming in)
 
@@ -69,6 +69,43 @@ Project author confirmed `classification-cnn-clean.ipynb` finished running on Ka
 
 **A second Kaggle-pushed commit found via the now-standard fetch-before-push check** — the *fully executed* `classification-cnn-clean.ipynb` (9,020 insertions, real outputs in 19 code cells). Verified cell sources were byte-identical to local before merging (zero divergence to reconcile) — purely additive, merged cleanly (`520e29f`), `nbformat.validate()` passed. Pushed; local and remote confirmed in sync.
 
-**Not yet done:** ViT batch (`classification-vit-clean.ipynb`) not yet run. Comparison against the dirty-data v2 results for the same 12 combos not yet done. Phase 2 (select top-2 CNN + top-2 transformer) waits on the ViT batch completing so all 18 combos can be compared together, same "analyze once, not twice" pattern already used for batch 1/batch 2 of the original v2 sweep.
+**Not yet done (as of the CNN-only milestone above):** ViT batch not yet run. Comparison against the dirty-data v2 results for the same 12 combos not yet done. Phase 2 (select top-2 CNN + top-2 transformer) waits on the ViT batch completing so all 18 combos can be compared together, same "analyze once, not twice" pattern already used for batch 1/batch 2 of the original v2 sweep.
 
-*(Further entries appended here as the training phase progresses — ViT batch results, the full 18-combo clean-data comparison, Phase 2 selection. Once this phase is complete and a new one starts, e.g. Phase 3's 3-fold CV on the champions, that gets its own `07_...` file in turn. Note: `06_efficientnet_b0_5fold_cv_deep_dive.md`, a separate file, consolidates earlier work that chronologically *preceded* this phase — sequential numbering here reflects file-creation order, not chronology.)*
+### 2026-08-04 — ViT/Transformer batch complete: organized, merged into a full 18-combo comparison
+
+Project author confirmed `classification-vit-clean.ipynb` finished on Kaggle and placed `vit_clean_results.zip` (3.10 GB, 45 entries — same flat `checkpoints/`/`logs/`/`plots/` layout as the CNN batch) at `classification/v2_clean_scripts/outputs/`. Extracted via `System.IO.Compression.ZipFile.ExtractToDirectory` (worked around a PowerShell cmdlet incompatibility with the boolean overwrite argument by omitting it, since the target subfolders didn't exist yet — no overwrite needed). Confirmed 6 combos present before organizing: `swin_t`/`vit_b_16`/`vit_l_16` × `palpebral`/`forniceal_palpebral`.
+
+**`organize_and_compare.py`'s dynamic combo-discovery worked exactly as designed** (`02_current_status.md`'s design note: "discovers combo names from `outputs/logs/*_study_summary.json` — not a hardcoded architecture list — so this same script works unchanged for the ViT batch later") — ran `organize_outputs()` unmodified, it found only the 6 newly-extracted combos (the 12 CNN combos were already moved out of the flat `logs/` dir from the earlier run, so they were correctly left untouched) and moved each into its own `outputs/{combo_name}/` folder (checkpoint + 2 logs + 4 plots + computed `metrics_summary.json/.md`, 9 files each, matching the CNN batch's layout exactly).
+
+**Comparison rebuilt to cover all 18 combos, not just the 6 new ones** — `build_comparison()` only receives whatever combo list it's called with, so a plain re-run of `organize_and_compare.py`'s `main()` would have silently overwritten `model_comparison/` with a 6-row table and dropped the 12 CNN results. Instead, scanned `outputs/` for every subdirectory (excluding `model_comparison/`) containing its own `*_study_summary.json`, extracted metrics for all 18, and rebuilt `comparison_table.csv` + `comparison_report.md` from the full set. Also fixed the report's title, which was hardcoded as "CNN Batch -- Model Comparison" from when only CNN results existed — renamed to "Full 18-Combo Model Comparison" (`organize_and_compare.py` line ~181) since it's no longer CNN-only, and the script will keep producing an accurate title for any future re-run.
+
+**One incidental blocker, resolved:** `comparison_table.csv` was open in Excel (project author had it open for inspection), which raised a `PermissionError` on the first write attempt — write succeeded once the file was closed, no data lost.
+
+**Full 18-combo results (sorted by F1):**
+
+| Rank | Model | F1 | Balanced Acc. | AUC | India/Italy AUC Gap |
+|---|---|---|---|---|---|
+| 1 | ConvNeXt-Tiny / palpebral | 0.9333 | 0.9474 | 0.9398 | 0.1000 |
+| 2 | ViT-B/16 / palpebral | 0.9333 | 0.9474 | 0.9098 | 0.1333 |
+| 3 | EfficientNet-B0 / forniceal_palpebral | 0.9032 | 0.9118 | 0.8824 | 0.3365 |
+| 4 | ViT-L/16 / palpebral | 0.8966 | 0.9117 | 0.9173 | 0.0583 |
+| 5 | RegNetY-400MF / forniceal_palpebral | 0.8966 | 0.9055 | 0.8739 | 0.4500 |
+| 6 | RegNetY-400MF / palpebral | 0.8750 | 0.8947 | 0.9173 | 0.2417 |
+| 7 | EfficientNet-B0 / palpebral | 0.8667 | 0.8853 | 0.9323 | 0.2167 |
+| 8 | DenseNet121 / forniceal_palpebral | 0.8485 | 0.8529 | 0.8782 | 0.3058 |
+| 9 | Swin-Tiny / palpebral | 0.8485 | 0.8684 | 0.8910 | 0.0500 |
+| 10 | DenseNet121 / palpebral | 0.8387 | 0.8590 | 0.8872 | 0.3583 |
+| 11 | ResNet18 / palpebral | 0.8387 | 0.8590 | 0.8910 | 0.2167 |
+| 12 | ViT-B/16 / forniceal_palpebral | 0.8333 | 0.8571 | 0.8950 | 0.2000 |
+| 13 | ViT-L/16 / forniceal_palpebral | 0.8276 | 0.8403 | 0.8109 | 0.2231 |
+| 14 | Swin-Tiny / forniceal_palpebral | 0.8276 | 0.8403 | 0.8193 | 0.3115 |
+| 15 | ConvNeXt-Tiny / forniceal_palpebral | 0.7778 | 0.7647 | 0.7437 | 0.2904 |
+| 16 | MobileNetV3-Small / palpebral | 0.7742 | 0.7970 | 0.8759 | 0.1083 |
+| 17 | ResNet18 / forniceal_palpebral | 0.7692 | 0.7983 | 0.7731 | 0.2750 |
+| 18 | MobileNetV3-Small / forniceal_palpebral | 0.7568 | 0.7353 | 0.7941 | 0.0192 |
+
+**Top performer (tied): ConvNeXt-Tiny/palpebral and ViT-B/16/palpebral** — identical F1 (0.9333) and Balanced Accuracy (0.9474); ConvNeXt-Tiny leads on AUC (0.9398 vs. 0.9098) and has the smaller confound gap (0.1000 vs. 0.1333), so it remains the single best headline result. **Best confound-handling unchanged: MobileNetV3-Small/forniceal_palpebral** (gap=0.0192), though notably **ViT-L/16/palpebral (0.0583) and Swin-Tiny/palpebral (0.0500)** now occupy the next-best confound-handling positions of any combo in the full 18 — the three best-confound combos besides MobileNetV3-Small are now all transformers on the palpebral crop, worth flagging as a candidate pattern (small n, not statistically tested) for Phase 2 selection.
+
+**Committed:** not yet — pending a separate explicit go-ahead, same standing rule as always.
+
+*(Further entries appended here as the training phase progresses — the dirty-vs-clean v2 comparison if performed, Phase 2 selection. Once this phase is complete and a new one starts, e.g. Phase 3's 3-fold CV on the champions, that gets its own `07_...` file in turn. Note: `06_efficientnet_b0_5fold_cv_deep_dive.md`, a separate file, consolidates earlier work that chronologically *preceded* this phase — sequential numbering here reflects file-creation order, not chronology.)*
