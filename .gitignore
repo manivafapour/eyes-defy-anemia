@@ -29,6 +29,11 @@ Segmentation/data/processed/masks/
 Segmentation/data/processed/aligned_raw/images/
 Segmentation/data/processed/aligned_raw/masks/
 
+# Same, for the forniceal_palpebral tissue-type variant
+# (Segmentation/scripts/build_aligned_dataset_forniceal.py)
+Segmentation/data/processed/aligned_raw_forniceal/images/
+Segmentation/data/processed/aligned_raw_forniceal/masks/
+
 # Orphaned local output from the abandoned Phase 3 crop-based approach
 # (its generating scripts were deleted; this directory is stale disk
 # clutter, kept ignored purely so it can't be accidentally committed)

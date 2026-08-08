@@ -1,13 +1,22 @@
 """
-Shared Optuna training engine for the palpebral conjunctiva segmentation
-models. Model-agnostic AND dataset-agnostic by design: it takes a model
-class/name and a dataset class, and runs the full 5-trial hyperparameter
-search against them. The per-model entry-point scripts (train_standard_
-unet.py, train_attention_unet.py, train_resunet.py, and their _aligned.py
-counterparts) each just import run_study() and pass in their own model +
-dataset -- no shared file needs editing to pick which architecture or
-dataset trains, which matters when execution happens on a remote notebook
-(Kaggle) rather than this local environment.
+Shared Optuna training engine for the conjunctiva segmentation models.
+Model-agnostic AND dataset-agnostic by design: it takes a model class/name
+(or, for the pretrained-architecture sweep, a zero-arg build_model factory
+-- see make_objective's docstring) and a dataset class, and runs the full
+hyperparameter search against them. Each entry-point script (the 18 in
+scripts/train_pretrained/, generated from models/segmentation/
+pretrained_registry.py) just imports run_study() and passes in its own
+model + dataset -- no shared file needs editing to pick which architecture
+or dataset trains, which matters when execution happens on a remote
+notebook (Kaggle) rather than this local environment.
+
+(The original 3 hand-built architectures this engine trained -- Standard
+U-Net, Attention U-Net, ResUNet, via train_standard_unet.py/
+train_attention_unet.py/train_resunet.py and their _aligned.py
+counterparts -- were removed once the pretrained-architecture sweep
+superseded them; see CLAUDE.md Sec 2.1-2.5/3.5-3.6 for the historical
+methodology/results record, intentionally kept even though the code and
+Kaggle checkpoints/logs are gone.)
 
 The loss function is also tuned by Optuna itself, not fixed per entry-point
 script: each trial samples trial.suggest_categorical("loss_fn", [...]) from
@@ -20,6 +29,7 @@ session ends: the best model's weights (outputs/checkpoints/) and the full
 per-trial metrics plus a best-trial summary (outputs/logs/).
 """
 
+import inspect
 import json
 import sys
 from datetime import datetime, timezone
@@ -37,8 +47,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataset import (  # noqa: E402
     BATCH_SIZE,
+    IMAGE_SIZE,
     SPLITS_CSV,
-    ConjunctivaSegmentationDataset,
+    AlignedConjunctivaSegmentationDataset,
     get_eval_transforms,
     get_train_transforms,
 )
@@ -220,15 +231,40 @@ def evaluate(model, loader, criterion, device, threshold: float = 0.5):
 # --------------------------------------------------------------------------
 # Optuna objective factory
 # --------------------------------------------------------------------------
-def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentationDataset):
+def make_objective(
+    model_cls,
+    model_name: str,
+    dataset_cls=AlignedConjunctivaSegmentationDataset,
+    build_model=None,
+    image_size: int = None,
+    tissue_type: str = None,
+):
     """Builds an Optuna objective(trial) closure bound to a specific model
     class/name and dataset class, so the same engine can drive any
     segmentation architecture (in_channels=3, out_channels=1 -> raw-logits
     contract) against any dataset that returns (image, mask) pairs on that
-    same contract -- e.g. ConjunctivaSegmentationDataset (crop-based) or
-    AlignedConjunctivaSegmentationDataset (raw-photo-aligned, CLAUDE.md
-    Sec 1.4). dataset_cls defaults to the original crop-based dataset so
-    existing callers that don't pass it are unaffected.
+    same contract. dataset_cls defaults to AlignedConjunctivaSegmentationDataset
+    (raw-photo-aligned, CLAUDE.md Sec 1.4) -- the only segmentation dataset
+    class remaining in this project since the original crop-based
+    ConjunctivaSegmentationDataset was removed along with the 3 hand-built
+    models that used it.
+
+    Three optional parameters extend this for the 9-architecture pretrained
+    sweep without needing per-architecture engine changes:
+    - build_model: a zero-arg callable returning a ready nn.Module, used
+      INSTEAD of `model_cls(in_channels=3, out_channels=1)` when given.
+      This is what ARCHITECTURE_REGISTRY[name]["build_fn"] provides for the
+      pretrained models (models/segmentation/pretrained_registry.py) --
+      those builders need encoder_weights="imagenet"/from_pretrained(...)
+      kwargs baked in, not a bare (in_channels, out_channels) contract.
+    - image_size: resolution to resize to via get_train_transforms/
+      get_eval_transforms. None (default) reproduces the original hardcoded
+      256 behavior exactly. The 3 pretrained Transformer architectures need
+      their own pretrained-checkpoint resolution (e.g. 224 or 512), same
+      reasoning as classification's CNN-vs-transformer input_size split.
+    - tissue_type: passed through to dataset_cls's constructor ONLY if that
+      class actually accepts a tissue_type kwarg (checked via
+      inspect.signature, not assumed).
 
     The closure also owns a `best_overall_dice` value that persists across
     every trial of the study (not just within one trial), so the checkpoint
@@ -244,6 +280,12 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
     best_overall_dice = 0.0
     best_dice_per_loss_fn = {name: 0.0 for name in LOSS_REGISTRY}
 
+    effective_image_size = image_size if image_size is not None else IMAGE_SIZE
+
+    dataset_kwargs = {}
+    if tissue_type is not None and "tissue_type" in inspect.signature(dataset_cls.__init__).parameters:
+        dataset_kwargs["tissue_type"] = tissue_type
+
     def objective(trial: optuna.Trial) -> float:
         nonlocal best_overall_dice, best_dice_per_loss_fn
         learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
@@ -251,10 +293,16 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
         loss_fn_name = trial.suggest_categorical("loss_fn", list(LOSS_REGISTRY.keys()))
 
         train_dataset = dataset_cls(
-            split="train", splits_csv=SPLITS_CSV, transform=get_train_transforms()
+            split="train",
+            splits_csv=SPLITS_CSV,
+            transform=get_train_transforms(effective_image_size),
+            **dataset_kwargs,
         )
         val_dataset = dataset_cls(
-            split="val", splits_csv=SPLITS_CSV, transform=get_eval_transforms()
+            split="val",
+            splits_csv=SPLITS_CSV,
+            transform=get_eval_transforms(effective_image_size),
+            **dataset_kwargs,
         )
 
         train_loader = DataLoader(
@@ -264,7 +312,7 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
             val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS
         )
 
-        model = model_cls(in_channels=3, out_channels=1).to(DEVICE)
+        model = build_model().to(DEVICE) if build_model is not None else model_cls(in_channels=3, out_channels=1).to(DEVICE)
         optimizer = torch.optim.AdamW(
             model.parameters(), lr=learning_rate, weight_decay=weight_decay
         )
@@ -332,16 +380,30 @@ def make_objective(model_cls, model_name: str, dataset_cls=ConjunctivaSegmentati
 def run_study(
     model_cls,
     model_name: str,
-    dataset_cls=ConjunctivaSegmentationDataset,
+    dataset_cls=AlignedConjunctivaSegmentationDataset,
     n_trials: int = N_TRIALS,
+    build_model=None,
+    image_size: int = None,
+    tissue_type: str = None,
 ) -> optuna.Study:
     print(f"Using device: {DEVICE}")
-    print(f"Model: {model_name} ({model_cls.__name__})")
-    print(f"Dataset: {dataset_cls.__name__}")
+    print(f"Model: {model_name} ({model_cls.__name__ if model_cls is not None else 'pretrained build_model'})")
+    print(f"Dataset: {dataset_cls.__name__}" + (f" (tissue_type={tissue_type})" if tissue_type else ""))
+    print(f"Image size: {image_size if image_size is not None else IMAGE_SIZE}")
 
     sampler = optuna.samplers.TPESampler(seed=SEED)
     study = optuna.create_study(direction="maximize", sampler=sampler)
-    study.optimize(make_objective(model_cls, model_name, dataset_cls), n_trials=n_trials)
+    study.optimize(
+        make_objective(
+            model_cls,
+            model_name,
+            dataset_cls,
+            build_model=build_model,
+            image_size=image_size,
+            tissue_type=tissue_type,
+        ),
+        n_trials=n_trials,
+    )
 
     print("\n--- Optuna study complete ---")
     print(f"Model: {model_name}")

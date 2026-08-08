@@ -173,6 +173,8 @@ A `cv2.selectROI`-based manual bounding-box annotation tool was built and tried 
 
 ## Phase 2 — Segmentation Model Architecture (`Segmentation/models/segmentation/unet.py`)
 
+**Status note (2026-08-08): this implementation was removed from the codebase.** The 3 hand-built architectures described in §2.1–2.5 (`unet.py`, `attention_unet.py`, `resunet.py`), their 6 entry-point scripts, the crop-based `ConjunctivaSegmentationDataset` they partly relied on, and their trained Kaggle checkpoints/logs (§3.5–3.6) were all deleted once the pretrained 9-architecture sweep (3 CNN + 3 Hybrid + 3 Transformer, `Segmentation/models/segmentation/pretrained_registry.py`) superseded them as this project's segmentation approach. §2.1–2.5 and §3.1–3.6 below are kept as the historical methodology/results record — accurate for what was built and learned at the time (e.g. the loss-function collapse investigation in §3.2a/§3.2b, which directly motivated design choices still in use) — but none of the code, checkpoints, or entry-point scripts they describe still exist in the repo.
+
 ### 2.1 Architecture specification
 A standard U-Net (Ronneberger et al., 2015 topology) with a symmetrical encoder-decoder and skip connections:
 

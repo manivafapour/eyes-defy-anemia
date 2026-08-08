@@ -1,6 +1,8 @@
 # Current Status — EYES-DEFY-ANEMIA
 
-Last updated: 2026-07-29
+Last updated: 2026-08-08
+
+**See `04_pretrained_architecture_sweep.md`** for everything from 2026-08-08 onward: the 9-architecture pretrained segmentation sweep (3 CNN + 3 Hybrid + 3 Transformer, both tissue types) and the removal of the original 3 hand-built models (U-Net/Attention U-Net/ResUNet) it superseded. Split into its own file the same day it was written, per the project author's request to keep memory files from growing unbounded — this file covers everything *before* that point.
 
 ## Repository reorganization: moved into `Segmentation/` (2026-07-29)
 Project author requested a clean top-level repo structure ahead of anyone cloning from GitHub — this entire segmentation-phase tree (`scripts/`, `models/`, `data/`, `outputs/`, `notebooks/`, `archive.zip`, `my_valuable_outputs.zip`, and this `.project_memory/` folder) moved from the repo root into a new `Segmentation/` folder, sitting alongside the sibling `classification/` module. `CLAUDE.md` deliberately stayed at the repo root (full reasoning in `03_tech_stack_and_rules.md`'s Directory Structure section) but had every internal path reference and its session-start instruction updated to the new `Segmentation/...` paths.
@@ -59,12 +61,13 @@ An early Kaggle training attempt on the (since-discarded, v1) aligned dataset co
 
 **Other settled infrastructure decisions (still current):** `n_trials=12` for the three `_aligned` entry-point scripts (was engine default of 5) — see `CLAUDE.md` §3.4. No Kaggle CLI in this environment; upload and running the 3 `_aligned` scripts remains a manual, external step for the project author. `my_valuable_outputs.zip` (351MB, untracked) is a harmless backup of the original crop-based Kaggle run's checkpoints/logs (§3.6).
 
-## Immediate next step
-1. **Project author uploads the freshly-rebuilt `data/processed/aligned_raw.zip` to Kaggle** (new dataset version — contains the corrected 201-patient data, mask bug fixed). `git pull` the latest code (includes the mask fix + `n_trials=12`).
-2. Run the 3 `_aligned` entry-point scripts on Kaggle (12 trials each, per-loss-function comparison built in).
+## Immediate next step (historical — superseded, see `04_pretrained_architecture_sweep.md`)
+This list described the plan for the original 3 hand-built models (train the 3 `_aligned` entry-point scripts on Kaggle). Those models and scripts were removed 2026-08-08, superseded by the 9-architecture pretrained sweep — the *current* immediate next step (run the real 18-combo × 12-trial Kaggle sweep, then the domain-shift check, then Phase 3/4) is tracked in `04_pretrained_architecture_sweep.md`'s "Not yet done" section instead. Kept below only as a historical record of what this project's plan looked like before the pivot:
+1. Project author uploads the freshly-rebuilt `data/processed/aligned_raw.zip` to Kaggle (new dataset version — contains the corrected 201-patient data, mask bug fixed). `git pull` the latest code (includes the mask fix + `n_trials=12`).
+2. ~~Run the 3 `_aligned` entry-point scripts on Kaggle~~ (12 trials each, per-loss-function comparison built in) — moot, scripts removed.
 3. Pull `outputs/checkpoints/best_*_aligned*.pth` + `outputs/logs/*_aligned_*` back into this repo.
 4. Compare `bce_dice` vs. `focal_tversky` via the per-loss comparison table in the study summary JSON.
-5. **Re-run a domain-shift check** — does the winning model actually isolate tissue on a raw photo? This is still the entire point of the original pivot; don't skip it.
+5. **Re-run a domain-shift check** — does the winning model actually isolate tissue on a raw photo? Still the entire point of the original pivot; still not done, now to be answered by the pretrained sweep instead.
 6. Only after that: rebuild Phase 3 (real inference + cropping) against whichever model generalizes.
 7. Phase 4 (classification) hasn't been started at all yet.
 8. Optional but recommended before the Kaggle run: re-run the `verify_alignment_sanity_check.ipynb`-style visual review against the regenerated `aligned_raw/` (only 2 of the 29 newly-fixed patients have been visually spot-checked so far).
