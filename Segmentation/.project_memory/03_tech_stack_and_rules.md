@@ -37,7 +37,9 @@ D:\khaje\EYES-DEFY-ANEMIA\
       logs/                -- per-trial CSV + best-trial JSON summaries (tracked)
     archive.zip            -- raw source data, gitignored
     .project_memory/       -- this lightweight working-memory system (roadmap/status/rules), split
-                              into additional numbered topic files as they grow (see rule 11 below)
+                              into additional numbered topic files as they grow (see rule 11 below);
+                              kaggle/01_kaggle_notes.md -- Kaggle execution specifics (mount paths,
+                              environment quirks), split out same as classification/'s own kaggle/ folder
 ```
 
 **Why `CLAUDE.md` stays at the repo root instead of moving into `Segmentation/`:** its own self-description is "the primary methodology reference for the project's written thesis" — a whole-project document (segmentation *and* classification), not segmentation-specific, even though its actual written content is 100% segmentation right now (classification/Phase 4 has never been written into it). Root placement also matters practically: Claude Code auto-loads a repo-root `CLAUDE.md` at the start of every session opened at `D:\khaje\EYES-DEFY-ANEMIA` — moving it into `Segmentation/` would silently stop that auto-loading for future sessions (the classification module's own `.project_memory/` already doesn't get auto-loaded, requiring explicit reference; the same would happen to this file if moved). `CLAUDE.md`'s own session-start instruction and every internal path reference were updated to point at `Segmentation/...` even though the file itself didn't move.
