@@ -41,6 +41,7 @@ matplotlib.use("Agg")  # headless -- this runs on Kaggle containers too, no disp
 import matplotlib.pyplot as plt
 import numpy as np
 import optuna
+import timm
 import torch
 import torch.nn as nn
 from sklearn.metrics import (
@@ -195,6 +196,124 @@ def build_vit_l_16(dropout_rate: float) -> nn.Module:
     return model
 
 
+# --------------------------------------------------------------------------
+# new_way/ roster (2026-08-08): 5 CNN + 3 hybrid architectures, added to this
+# same shared registry rather than a separate engine -- identical mechanism
+# to how the original 3 became 9 during the v2 expansion (each entry-point
+# script just calls run_study() with its own arch_name/tissue_type/model_name;
+# nothing else in the engine changes to support a new architecture).
+#
+# Weight-variant choice for RegNetY-16GF verified, not defaulted: torchvision
+# offers 4 pretrained variants for this architecture (top-1 80.4/82.9/86.0/84.0
+# for V1/V2/SWAG_E2E_V1/SWAG_LINEAR_V1 respectively). The two higher-accuracy
+# SWAG variants require 384x384 and 224x224 input respectively (checked via
+# each weight's own .transforms()) -- neither matches this project's uniform
+# 256x256 resize used for every other CNN. IMAGENET1K_V1 (256 resize per its
+# own recommended preprocessing) is kept despite being the lowest nominal
+# top-1 of the four, on the same resolution-compatibility reasoning already
+# applied when ViT-L/16 was given IMAGENET1K_SWAG_LINEAR_V1 instead of the
+# default -- there, the stronger variant happened to match the existing
+# convention (224 for transformers); here, none of the stronger RegNetY
+# variants match the existing convention (256 for CNNs), so the default is
+# the consistent choice instead.
+#
+# MaxViT-Tiny and MaxViT-Small both have a "pre_logits"-style hidden
+# Linear+Tanh bottleneck baked into their pretrained head (512->512 for
+# maxvit_t, 768->768 for maxvit_small) BEFORE the final classification
+# Linear -- verified by inspecting each model's head directly, not assumed.
+# Left frozen (as pretrained feature-processing) rather than left trainable,
+# so the trainable head stays the same tiny scale (~500-800 params) as every
+# other architecture in this project; only the final Linear is replaced.
+# --------------------------------------------------------------------------
+def build_efficientnet_b3(dropout_rate: float) -> nn.Module:
+    model = models.efficientnet_b3(weights=models.EfficientNet_B3_Weights.IMAGENET1K_V1)
+    _freeze_all(model)
+    in_features = model.classifier[1].in_features
+    model.classifier[0].p = dropout_rate  # overwrite the pre-existing fixed p=0.3 dropout
+    model.classifier[1] = nn.Linear(in_features, 1)
+    return model
+
+
+def build_efficientnet_b4(dropout_rate: float) -> nn.Module:
+    model = models.efficientnet_b4(weights=models.EfficientNet_B4_Weights.IMAGENET1K_V1)
+    _freeze_all(model)
+    in_features = model.classifier[1].in_features
+    model.classifier[0].p = dropout_rate  # overwrite the pre-existing fixed p=0.4 dropout
+    model.classifier[1] = nn.Linear(in_features, 1)
+    return model
+
+
+def build_regnet_y_16gf(dropout_rate: float) -> nn.Module:
+    model = models.regnet_y_16gf(weights=models.RegNet_Y_16GF_Weights.IMAGENET1K_V1)
+    _freeze_all(model)
+    in_features = model.fc.in_features
+    model.fc = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, 1))
+    return model
+
+
+def build_convnext_base(dropout_rate: float) -> nn.Module:
+    model = models.convnext_base(weights=models.ConvNeXt_Base_Weights.IMAGENET1K_V1)
+    _freeze_all(model)
+    in_features = model.classifier[2].in_features
+    model.classifier[2] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, 1))
+    return model
+
+
+def build_convnext_large(dropout_rate: float) -> nn.Module:
+    model = models.convnext_large(weights=models.ConvNeXt_Large_Weights.IMAGENET1K_V1)
+    _freeze_all(model)
+    in_features = model.classifier[2].in_features
+    model.classifier[2] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, 1))
+    return model
+
+
+def build_maxvit_t(dropout_rate: float) -> nn.Module:
+    # classifier[0:5] (AdaptiveAvgPool2d, Flatten, LayerNorm, the pretrained
+    # 512->512 Linear+Tanh bottleneck) stay frozen; only classifier[5] (the
+    # final Linear) is replaced -- same "keep shape-adapting layers, replace
+    # only the final classification layer" pattern already used for
+    # ConvNeXt's classifier[2].
+    model = models.maxvit_t(weights=models.MaxVit_T_Weights.IMAGENET1K_V1)
+    _freeze_all(model)
+    in_features = model.classifier[5].in_features
+    model.classifier[5] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, 1))
+    return model
+
+
+def build_maxvit_small(dropout_rate: float) -> nn.Module:
+    # timm, not torchvision -- MaxViT-Small doesn't exist in torchvision at
+    # all (verified: torchvision's only MaxViT variant is maxvit_t).
+    # num_classes=1 has timm construct the correctly-shaped final Linear
+    # directly. Pretrained tag "in1k" -- standard ImageNet-1k, same regime as
+    # every torchvision weight in this project (verified via
+    # model.pretrained_cfg). head.pre_logits (768->768) stays frozen, only
+    # head.fc is unfrozen; head.drop's pre-existing (p=0.0) dropout is
+    # overwritten with the trial's dropout_rate, same "overwrite existing
+    # dropout .p" pattern used for MobileNetV3-Small/EfficientNet-B0/B3/B4.
+    model = timm.create_model("maxvit_small_tf_224.in1k", pretrained=True, num_classes=1)
+    _freeze_all(model)
+    for p in model.head.fc.parameters():
+        p.requires_grad = True
+    model.head.drop.p = dropout_rate
+    return model
+
+
+def build_coatnet_3(dropout_rate: float) -> nn.Module:
+    # timm, not torchvision -- CoAtNet was never ported to torchvision in any
+    # size. Pretrained tag "sw_in12k" -- ImageNet-12k, with NO ImageNet-1k
+    # fine-tuning stage (verified: no coatnet_3_rw_224 tag with an
+    # "_ft_in1k" suffix exists in timm's pretrained-weight list) -- the one
+    # architecture in this roster with a different pretraining regime from
+    # every other model in this project; recorded in
+    # 03_tech_stack_and_rules.md, not silently treated as equivalent.
+    model = timm.create_model("coatnet_3_rw_224.sw_in12k", pretrained=True, num_classes=1)
+    _freeze_all(model)
+    for p in model.head.fc.parameters():
+        p.requires_grad = True
+    model.head.drop.p = dropout_rate
+    return model
+
+
 ARCHITECTURE_REGISTRY = {
     "resnet18": {"build_fn": build_resnet18, "input_size": 256},
     "mobilenet_v3_small": {"build_fn": build_mobilenet_v3_small, "input_size": 256},
@@ -205,6 +324,15 @@ ARCHITECTURE_REGISTRY = {
     "swin_t": {"build_fn": build_swin_t, "input_size": 224},
     "vit_b_16": {"build_fn": build_vit_b_16, "input_size": 224},
     "vit_l_16": {"build_fn": build_vit_l_16, "input_size": 224},
+    # new_way/ roster (2026-08-08)
+    "efficientnet_b3": {"build_fn": build_efficientnet_b3, "input_size": 256},
+    "efficientnet_b4": {"build_fn": build_efficientnet_b4, "input_size": 256},
+    "regnet_y_16gf": {"build_fn": build_regnet_y_16gf, "input_size": 256},
+    "convnext_base": {"build_fn": build_convnext_base, "input_size": 256},
+    "convnext_large": {"build_fn": build_convnext_large, "input_size": 256},
+    "maxvit_t": {"build_fn": build_maxvit_t, "input_size": 224},
+    "maxvit_small": {"build_fn": build_maxvit_small, "input_size": 224},
+    "coatnet_3": {"build_fn": build_coatnet_3, "input_size": 224},
 }
 
 

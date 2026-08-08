@@ -1,9 +1,15 @@
 # Tech Stack & Development Rules — classification/ (Phase 4)
 
 ## Core stack
-Same installed environment as the root project (same `venv/`, same PyTorch/torchvision/CUDA setup) — no new dependencies introduced. Uses `torchvision.models` pretrained weights, `optuna`, `albumentations`, `scikit-learn` (`sklearn.metrics` for accuracy/precision/recall/F1/AUC, and `train_test_split` for the stratified split).
+Same installed environment as the root project (same `venv/`, same PyTorch/torchvision/CUDA setup). Uses `torchvision.models` pretrained weights, `optuna`, `albumentations`, `scikit-learn` (`sklearn.metrics` for accuracy/precision/recall/F1/AUC, and `train_test_split` for the stratified split).
 
-**Architecture roster (9, as of the v2 expansion, 2026-07-28)** — all confirmed available in the installed `torchvision 0.28.0` with ImageNet-pretrained weights, all frozen-backbone + trained head: ResNet18, MobileNetV3-Small, EfficientNet-B0 (original 3), DenseNet121, ConvNeXt-Tiny, RegNetY-400MF (new CNNs), Swin-Tiny, ViT-B/16, ViT-L/16 (new transformers, lightweight/medium/heavy). Full rationale in `02_current_status.md`. Deliberately kept torchvision-native (no `timm`) to preserve the "no new dependencies" rule below.
+**Architecture roster (9, as of the v2 expansion, 2026-07-28)** — all confirmed available in the installed `torchvision 0.28.0` with ImageNet-pretrained weights, all frozen-backbone + trained head: ResNet18, MobileNetV3-Small, EfficientNet-B0 (original 3), DenseNet121, ConvNeXt-Tiny, RegNetY-400MF (new CNNs), Swin-Tiny, ViT-B/16, ViT-L/16 (new transformers, lightweight/medium/heavy). Full rationale in `02_current_status.md`. Kept deliberately torchvision-native (no `timm`) at the time.
+
+**`timm` adopted as a real dependency (2026-08-08), for the `new_way/` roster (built same day — see `08_new_way_architecture_roster.md`).** The previous "no new dependencies" stance held only as long as torchvision's model zoo covered what was needed — it doesn't for two specific architectures the project author wants: **MaxViT-Small** and **CoAtNet-3** are not in torchvision at all (verified directly: torchvision's *only* MaxViT variant is `maxvit_t`; CoAtNet was never ported to torchvision in any size). `timm==1.0.28` added to root `requirements.txt`, along with its two real transitive dependencies `huggingface_hub==1.26.0` and `safetensors==0.8.0` (it was already incidentally present in the venv, unpinned and untracked, before this — now formally adopted and recorded).
+
+**Verified before calling it done, not just installed:** both target models built with `pretrained=True`, real weights downloaded from Hugging Face Hub, and a forward pass run — not just import-checked.
+- `maxvit_small_tf_224.in1k` — **68.16M params**, output shape `(1, 768)`. Pretrained tag `in1k` — **standard ImageNet-1k weights, same regime as every torchvision model in this project.** No inconsistency here.
+- `coatnet_3_rw_224.sw_in12k` — **163.64M params**, output shape `(1, 1536)`. Pretrained tag `sw_in12k` — trained on the larger **ImageNet-12k**, with **no ImageNet-1k fine-tuning stage** (confirmed: `timm.list_models('coatnet*', pretrained=True)` has no `coatnet_3_rw_224.*_ft_in1k` variant, unlike e.g. `coatnet_2_rw_224.sw_in12k_ft_in1k`). This is the one architecture in the planned roster with a genuinely different pretraining regime from everything else — worth an explicit note if reported in the thesis, not treated as just another interchangeable pretrained backbone.
 
 ## Directory structure
 **Renamed 2026-07-31:** `scripts/` -> `datapreparepipeline/` (git-mv'd, history preserved). The original 6 v1 entry-point scripts (`train_{arch}_{tissue}.py`, already retired/do-not-run as of the v2 expansion) were deleted outright rather than carried over, since nothing still depended on them. Every import/path reference to the old `scripts/` name (18 `v2_scripts/*.py` entry points, the CV pipeline's `cv_dataset.py`/`cv_trainer_engine.py`, `dataset.py`'s own docstring, `.gitignore`, and the 3 Kaggle notebooks) was updated and re-verified (`py_compile` + a real runtime import) to resolve against the new name. See `02_current_status.md` for the full account.
@@ -56,8 +62,8 @@ classification/
                               the original 6 scripts' same-directory import).
   v2_clean_scripts/
     train_{arch}_{tissue}_v2_clean.py  -- 18 entry points, same v2 protocol against the
-                              white-background-bug-fixed data. Its outputs/ holds the 12
-                              completed CNN results (ViT batch still unrun).
+                              white-background-bug-fixed data. Its outputs/ holds all 18
+                              completed combos (CNN + transformer batches both done).
   step1_cv_harness/         -- NEW 2026-08-04. Defensibility programme, Step 1: pooled
                               out-of-fold repeated stratified CV + bootstrap CIs, replacing
                               the single split's 40-discordant-pair India AUC (CI half-width
@@ -69,6 +75,13 @@ classification/
                               bit-identical to what v2_clean trained -- a forked copy would
                               silently drift and stop being a valid baseline. Writes NO
                               checkpoints by design (predictions, not weights).
+  new_way/                  -- NEW 2026-08-08. Fresh 8-architecture roster (5 CNN + 3
+                              Hybrid; ViT deliberately dropped -- vit_b_16/vit_l_16 already
+                              fully trained in v2_clean), 16 entry points (8 archs x 2
+                              tissue types), model_name suffix _new_way. Same shared
+                              trainer_engine.py/ARCHITECTURE_REGISTRY mechanism as v2_clean
+                              (extended, not a new engine) -- see 08_new_way_architecture_
+                              roster.md. First user of the timm dependency (below).
   outputs/
     checkpoints/           -- gitignored
     logs/                   -- tracked (per-trial CSV + study summary JSON)
