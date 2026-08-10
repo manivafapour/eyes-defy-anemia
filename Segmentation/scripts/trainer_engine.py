@@ -248,6 +248,20 @@ def count_parameters(model) -> int:
     return sum(p.numel() for p in model.parameters())
 
 
+def _half_state_dict(state_dict: dict) -> dict:
+    """Casts every floating-point tensor in a state_dict to fp16, leaving
+    non-floating buffers (e.g. BatchNorm's integer num_batches_tracked)
+    untouched -- halves checkpoint file size on disk for a real, measured
+    disk-quota problem (.project_memory/kaggle/01_kaggle_notes.md), at the
+    cost of some precision. Safe to load back into a fresh fp32 model:
+    Tensor.copy_ (what load_state_dict uses internally) casts across
+    dtypes automatically."""
+    return {
+        key: (value.half() if torch.is_tensor(value) and value.is_floating_point() else value)
+        for key, value in state_dict.items()
+    }
+
+
 def measure_inference_latency(model, image_size: int, device, n_warmup: int = 5, n_repeats: int = 20) -> float:
     """Average single-image (batch_size=1) forward-pass latency, in
     milliseconds. GPU calls are asynchronous, so an un-synchronized
@@ -314,16 +328,22 @@ def make_objective(
     The closure also owns a `best_overall_dice` value that persists across
     every trial of the study (not just within one trial), so the checkpoint
     written to disk is always the single best-performing model seen across
-    the whole search -- not just the last trial's own local best. It
-    additionally tracks a best-dice-per-loss-function dict, so each loss
-    function in LOSS_REGISTRY gets its own checkpoint too (see
-    best_{model_name}_{loss_fn}.pth) -- needed for a side-by-side
-    comparison, since the single "overall best" checkpoint alone would
-    hide whichever loss function didn't happen to win outright."""
+    the whole search -- not just the last trial's own local best.
+
+    Only ONE checkpoint file is persisted per model (the overall best) --
+    an earlier version also saved a separate best-checkpoint per loss
+    function (best_{model_name}_{loss_fn}.pth) for a side-by-side
+    comparison, but that tripled on-disk checkpoint volume across the
+    18-combo sweep and was a direct contributor to a real Kaggle
+    disk-quota crash ("Your notebook tried to use more disk space than is
+    available", 20.93GB, .project_memory/kaggle/01_kaggle_notes.md). The
+    per-loss-function *comparison* (trial count, mean/max Dice per loss)
+    is unaffected -- it's computed from the trials dataframe in
+    _save_outputs(), not from these checkpoint files, so nothing about the
+    actual bce_dice-vs-focal_tversky analysis is lost."""
     CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint_path = CHECKPOINTS_DIR / f"best_{model_name}.pth"
     best_overall_dice = 0.0
-    best_dice_per_loss_fn = {name: 0.0 for name in LOSS_REGISTRY}
 
     effective_image_size = image_size if image_size is not None else IMAGE_SIZE
 
@@ -332,7 +352,7 @@ def make_objective(
         dataset_kwargs["tissue_type"] = tissue_type
 
     def objective(trial: optuna.Trial) -> float:
-        nonlocal best_overall_dice, best_dice_per_loss_fn
+        nonlocal best_overall_dice
         learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
         weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
         loss_fn_name = trial.suggest_categorical("loss_fn", list(LOSS_REGISTRY.keys()))
@@ -392,19 +412,10 @@ def make_objective(
 
                 if val_dice > best_overall_dice:
                     best_overall_dice = val_dice
-                    torch.save(model.state_dict(), checkpoint_path)
+                    torch.save(_half_state_dict(model.state_dict()), checkpoint_path)
                     print(
                         f"[{model_name} | Trial {trial.number}] New best overall "
-                        f"val_dice={val_dice:.4f} -> saved {checkpoint_path}"
-                    )
-
-                if val_dice > best_dice_per_loss_fn[loss_fn_name]:
-                    best_dice_per_loss_fn[loss_fn_name] = val_dice
-                    per_loss_checkpoint_path = CHECKPOINTS_DIR / f"best_{model_name}_{loss_fn_name}.pth"
-                    torch.save(model.state_dict(), per_loss_checkpoint_path)
-                    print(
-                        f"[{model_name} | Trial {trial.number}] New best for loss_fn={loss_fn_name} "
-                        f"val_dice={val_dice:.4f} -> saved {per_loss_checkpoint_path}"
+                        f"val_dice={val_dice:.4f} -> saved {checkpoint_path} (fp16)"
                     )
 
             print(
@@ -606,10 +617,6 @@ def _save_outputs(
             .to_dict(orient="index")
         )
         summary["per_loss_fn_comparison"] = comparison
-        summary["per_loss_fn_checkpoints"] = {
-            loss_name: str(CHECKPOINTS_DIR / f"best_{model_name}_{loss_name}.pth")
-            for loss_name in LOSS_REGISTRY
-        }
 
         print("\n--- Per-loss-function comparison ---")
         print(trials_df.groupby("params_loss_fn")["value"].agg(["count", "mean", "max"]))
