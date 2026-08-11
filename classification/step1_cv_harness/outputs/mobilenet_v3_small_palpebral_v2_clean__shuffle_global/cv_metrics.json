@@ -1,0 +1,295 @@
+{
+  "combo": {
+    "combo_name": "mobilenet_v3_small_palpebral_v2_clean",
+    "arch_name": "mobilenet_v3_small",
+    "tissue_type": "palpebral",
+    "learning_rate": 0.08088564223049027,
+    "weight_decay": 1.0422971466648463e-06,
+    "dropout_rate": 0.5,
+    "source_summary": "v2_clean_scripts/outputs/mobilenet_v3_small_palpebral_v2_clean/mobilenet_v3_small_palpebral_v2_clean_study_summary.json",
+    "source_best_val_f1": 0.7741935483870968
+  },
+  "tag": "mobilenet_v3_small_palpebral_v2_clean__shuffle_global",
+  "shuffle_control": "global",
+  "n_splits": 5,
+  "n_repeats": 5,
+  "seed": 42,
+  "n_bootstrap": 2000,
+  "pool_composition": {
+    "n_total": 184,
+    "cells": {
+      "India_0": 42,
+      "India_1": 38,
+      "Italy_0": 65,
+      "Italy_1": 39
+    },
+    "India": {
+      "n_anemic": 38,
+      "n_healthy": 42,
+      "n_discordant_pairs": 1596
+    },
+    "Italy": {
+      "n_anemic": 39,
+      "n_healthy": 65,
+      "n_discordant_pairs": 2535
+    },
+    "overall": {
+      "n_anemic": 77,
+      "n_healthy": 107,
+      "n_discordant_pairs": 8239
+    }
+  },
+  "auc": {
+    "overall": {
+      "point": 0.503119310595946,
+      "ci_low": 0.41218291054739653,
+      "ci_high": 0.5918376016506857,
+      "ci_half_width": 0.08982734555164457,
+      "n_valid_replicates": 2000,
+      "per_repeat": [
+        0.46644010195412067,
+        0.5044301492899623,
+        0.50175992232067,
+        0.5294331836387911,
+        0.5135331957761864
+      ],
+      "sd_across_repeats": 0.023182965191156216
+    },
+    "India": {
+      "point": 0.4989974937343358,
+      "ci_low": 0.3696428571428571,
+      "ci_high": 0.6278352130325814,
+      "ci_half_width": 0.12909617794486214,
+      "n_valid_replicates": 2000,
+      "per_repeat": [
+        0.4849624060150376,
+        0.5025062656641603,
+        0.5112781954887218,
+        0.5112781954887218,
+        0.4849624060150376
+      ],
+      "sd_across_repeats": 0.013303290252722002
+    },
+    "Italy": {
+      "point": 0.4939644970414202,
+      "ci_low": 0.3620907297830375,
+      "ci_high": 0.6272189349112426,
+      "ci_half_width": 0.13256410256410253,
+      "n_valid_replicates": 2000,
+      "per_repeat": [
+        0.4370808678500986,
+        0.4927021696252466,
+        0.485207100591716,
+        0.5345167652859961,
+        0.5203155818540435
+      ],
+      "sd_across_repeats": 0.03759288118660499
+    },
+    "india_italy_gap": {
+      "point": 0.0050329966929156585,
+      "ci_low": -0.17183079740772048,
+      "ci_high": 0.18338067802642677,
+      "ci_half_width": 0.1776057377170736,
+      "n_valid_replicates": 2000,
+      "per_repeat": [
+        0.04788153816493901,
+        0.009804096038913745,
+        0.026071094897005764,
+        -0.023238569797274344,
+        -0.03535317583900588
+      ],
+      "sd_across_repeats": 0.034393629042605386
+    }
+  },
+  "fold_log": [
+    {
+      "repeat": 0,
+      "fold": 0,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 0.9329723119735718
+    },
+    {
+      "repeat": 0,
+      "fold": 1,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 1.1098593473434448
+    },
+    {
+      "repeat": 0,
+      "fold": 2,
+      "n_epochs_run": 15,
+      "best_inner_epoch": 8,
+      "best_inner_loss": 1.4404592514038086
+    },
+    {
+      "repeat": 0,
+      "fold": 3,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 2.185699939727783
+    },
+    {
+      "repeat": 0,
+      "fold": 4,
+      "n_epochs_run": 17,
+      "best_inner_epoch": 10,
+      "best_inner_loss": 1.1673978567123413
+    },
+    {
+      "repeat": 1,
+      "fold": 0,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 1.0602222681045532
+    },
+    {
+      "repeat": 1,
+      "fold": 1,
+      "n_epochs_run": 11,
+      "best_inner_epoch": 4,
+      "best_inner_loss": 0.7888045907020569
+    },
+    {
+      "repeat": 1,
+      "fold": 2,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 2.6785261631011963
+    },
+    {
+      "repeat": 1,
+      "fold": 3,
+      "n_epochs_run": 9,
+      "best_inner_epoch": 2,
+      "best_inner_loss": 0.7768791913986206
+    },
+    {
+      "repeat": 1,
+      "fold": 4,
+      "n_epochs_run": 20,
+      "best_inner_epoch": 13,
+      "best_inner_loss": 2.230588436126709
+    },
+    {
+      "repeat": 2,
+      "fold": 0,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 3.226686716079712
+    },
+    {
+      "repeat": 2,
+      "fold": 1,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 5.022043704986572
+    },
+    {
+      "repeat": 2,
+      "fold": 2,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 3.7310194969177246
+    },
+    {
+      "repeat": 2,
+      "fold": 3,
+      "n_epochs_run": 13,
+      "best_inner_epoch": 6,
+      "best_inner_loss": 1.2598481178283691
+    },
+    {
+      "repeat": 2,
+      "fold": 4,
+      "n_epochs_run": 9,
+      "best_inner_epoch": 2,
+      "best_inner_loss": 0.824005126953125
+    },
+    {
+      "repeat": 3,
+      "fold": 0,
+      "n_epochs_run": 13,
+      "best_inner_epoch": 6,
+      "best_inner_loss": 0.9626235961914062
+    },
+    {
+      "repeat": 3,
+      "fold": 1,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 1.1071244478225708
+    },
+    {
+      "repeat": 3,
+      "fold": 2,
+      "n_epochs_run": 10,
+      "best_inner_epoch": 3,
+      "best_inner_loss": 0.9413434863090515
+    },
+    {
+      "repeat": 3,
+      "fold": 3,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 1.7658687829971313
+    },
+    {
+      "repeat": 3,
+      "fold": 4,
+      "n_epochs_run": 10,
+      "best_inner_epoch": 3,
+      "best_inner_loss": 0.8136446475982666
+    },
+    {
+      "repeat": 4,
+      "fold": 0,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 1.8651334047317505
+    },
+    {
+      "repeat": 4,
+      "fold": 1,
+      "n_epochs_run": 21,
+      "best_inner_epoch": 14,
+      "best_inner_loss": 0.972991943359375
+    },
+    {
+      "repeat": 4,
+      "fold": 2,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 2.83532977104187
+    },
+    {
+      "repeat": 4,
+      "fold": 3,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 0.6530236005783081
+    },
+    {
+      "repeat": 4,
+      "fold": 4,
+      "n_epochs_run": 8,
+      "best_inner_epoch": 1,
+      "best_inner_loss": 1.1635318994522095
+    }
+  ],
+  "plot_paths": {
+    "loss_curves_grid": "/kaggle/working/eyes-defy-anemia/classification/step1_cv_harness/outputs/mobilenet_v3_small_palpebral_v2_clean__shuffle_global/plots/mobilenet_v3_small_palpebral_v2_clean__shuffle_global_loss_curves_grid.png",
+    "confusion_matrices_grid": "/kaggle/working/eyes-defy-anemia/classification/step1_cv_harness/outputs/mobilenet_v3_small_palpebral_v2_clean__shuffle_global/plots/mobilenet_v3_small_palpebral_v2_clean__shuffle_global_confusion_matrices_grid.png",
+    "roc_curves_grid": "/kaggle/working/eyes-defy-anemia/classification/step1_cv_harness/outputs/mobilenet_v3_small_palpebral_v2_clean__shuffle_global/plots/mobilenet_v3_small_palpebral_v2_clean__shuffle_global_roc_curves_grid.png",
+    "fold_metrics_summary": "/kaggle/working/eyes-defy-anemia/classification/step1_cv_harness/outputs/mobilenet_v3_small_palpebral_v2_clean__shuffle_global/plots/mobilenet_v3_small_palpebral_v2_clean__shuffle_global_fold_metrics_summary.png"
+  },
+  "runtime_seconds": 103.9,
+  "gates": {
+    "precision_india_ci_half_width": {
+      "value": 0.12909617794486214,
+      "threshold": 0.12,
+      "passed": false
+    }
+  }
+}

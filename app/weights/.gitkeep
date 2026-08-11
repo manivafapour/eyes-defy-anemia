@@ -1,0 +1,3 @@
+# Model weights live here at runtime (gitignored). Nothing is committed.
+# Stage 2: best_convnext_tiny_palpebral_v2_clean.pth  (copied/pulled in Phase 1)
+# Stage 1: aligned U-Net checkpoint (once trained + verified)

@@ -1,0 +1,120 @@
+[
+  {
+    "tissue_type": "palpebral",
+    "n_splits": 5,
+    "n_repeats": 5,
+    "seed": 42,
+    "pool_composition": {
+      "n_total": 184,
+      "cells": {
+        "India_0": 23,
+        "India_1": 57,
+        "Italy_0": 84,
+        "Italy_1": 20
+      },
+      "India": {
+        "n_anemic": 57,
+        "n_healthy": 23,
+        "n_discordant_pairs": 1311
+      },
+      "Italy": {
+        "n_anemic": 20,
+        "n_healthy": 84,
+        "n_discordant_pairs": 1680
+      },
+      "overall": {
+        "n_anemic": 77,
+        "n_healthy": 107,
+        "n_discordant_pairs": 8239
+      }
+    },
+    "n_held_out": 33,
+    "checks": [
+      {
+        "check": "1. test-set isolation",
+        "passed": true,
+        "detail": "0 of 33 held-out test patients appear in any fold"
+      },
+      {
+        "check": "2. partition integrity",
+        "passed": true,
+        "detail": "each of 5 repeats partitions all 184 pool patients exactly once"
+      },
+      {
+        "check": "3. rare-cell coverage",
+        "passed": true,
+        "detail": "min India_0 per outer val fold = 4 (at r0f0), min Italy_1 per outer val fold = 4 (at r0f0)"
+      },
+      {
+        "check": "4. pair counts (palpebral)",
+        "passed": true,
+        "detail": "pool n=184 cells={'India_0': 23, 'India_1': 57, 'Italy_0': 84, 'Italy_1': 20} | India 57x23=1311 pairs (32.8x the single split's 40) | Italy 20x84=1680 pairs (28.0x the single split's 60)"
+      },
+      {
+        "check": "6. fold reproducibility",
+        "passed": true,
+        "detail": "two independent build_folds(seed=42) calls produced identical assignments"
+      }
+    ],
+    "all_passed": true
+  },
+  {
+    "tissue_type": "forniceal_palpebral",
+    "n_splits": 5,
+    "n_repeats": 5,
+    "seed": 42,
+    "pool_composition": {
+      "n_total": 178,
+      "cells": {
+        "India_0": 23,
+        "India_1": 57,
+        "Italy_0": 79,
+        "Italy_1": 19
+      },
+      "India": {
+        "n_anemic": 57,
+        "n_healthy": 23,
+        "n_discordant_pairs": 1311
+      },
+      "Italy": {
+        "n_anemic": 19,
+        "n_healthy": 79,
+        "n_discordant_pairs": 1501
+      },
+      "overall": {
+        "n_anemic": 76,
+        "n_healthy": 102,
+        "n_discordant_pairs": 7752
+      }
+    },
+    "n_held_out": 33,
+    "checks": [
+      {
+        "check": "1. test-set isolation",
+        "passed": true,
+        "detail": "0 of 33 held-out test patients appear in any fold"
+      },
+      {
+        "check": "2. partition integrity",
+        "passed": true,
+        "detail": "each of 5 repeats partitions all 178 pool patients exactly once"
+      },
+      {
+        "check": "3. rare-cell coverage",
+        "passed": true,
+        "detail": "min India_0 per outer val fold = 4 (at r0f0), min Italy_1 per outer val fold = 3 (at r0f4)"
+      },
+      {
+        "check": "4. pair counts (forniceal_palpebral)",
+        "passed": true,
+        "detail": "pool n=178 cells={'India_0': 23, 'India_1': 57, 'Italy_0': 79, 'Italy_1': 19} | India 57x23=1311 pairs (32.8x the single split's 40) | Italy 19x79=1501 pairs (25.0x the single split's 60)"
+      },
+      {
+        "check": "6. fold reproducibility",
+        "passed": true,
+        "detail": "two independent build_folds(seed=42) calls produced identical assignments"
+      }
+    ],
+    "all_passed": true
+  }
+]

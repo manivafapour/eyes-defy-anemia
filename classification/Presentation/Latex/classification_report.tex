@@ -1,0 +1,156 @@
+% ==============================================================================
+% گزارش فنی پروژه — فاز چهارم: طبقه‌بندی کم‌خونی از روی تصاویر چشم
+% پروژه: EYES-DEFY-ANEMIA
+% این فایل باید با XeLaTeX کامپایل شود (نه pdfLaTeX)، به دلیل استفاده از xepersian.
+% فایل‌های فونت مورد استفاده (XB Yas.ttf و گونه‌های آن) از قبل در همین پوشه موجودند.
+% ==============================================================================
+
+\documentclass[12pt]{article}
+
+% ------------------------------------------------------------------------------
+% ۱. تنظیمات صفحه
+% ------------------------------------------------------------------------------
+\usepackage{geometry}
+\geometry{a4paper, top=3cm, bottom=3cm, left=2.5cm, right=2.5cm}
+
+% ------------------------------------------------------------------------------
+% ۲. پشتیبانی از زبان فارسی (xepersian)
+% ------------------------------------------------------------------------------
+\usepackage{xepersian}
+\settextfont[
+    BoldFont      = {XB Yas Bd.ttf},
+    ItalicFont    = {XB Yas It.ttf},
+    BoldItalicFont= {XB Yas BdIt.ttf}
+]{XB Yas.ttf}
+\setlatintextfont{Times New Roman}
+
+% ------------------------------------------------------------------------------
+% ۳. بسته‌های ریاضی، جدول و تصویر
+% ------------------------------------------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}      % جداول با کیفیت انتشاراتی
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{graphicx}
+\graphicspath{{img/}}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% ------------------------------------------------------------------------------
+% ۴. رنگ، جعبه‌متن و قطعه‌کد (برای بخش ۴ - جزئیات پیاده‌سازی)
+% ------------------------------------------------------------------------------
+\usepackage[dvipsnames]{xcolor}
+\usepackage{tcolorbox}
+\usepackage{listings}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=6pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    rulecolor=\color{codegray!40}
+}
+\lstset{style=pythonstyle}
+\renewcommand{\lstlistingname}{قطعه‌کد}
+
+% ==============================================================================
+% ۵. اطلاعات صفحه‌ی عنوان — این بخش را پیش از کامپایل با اطلاعات خود تکمیل کنید
+% (پیش از hyperref تعریف می‌شود چون pdfauthor از آن استفاده می‌کند)
+% ==============================================================================
+\newcommand{\authorNamePlaceholder}{[نام و نام خانوادگی دانشجو]}
+\newcommand{\studentIdPlaceholder}{[شماره دانشجویی]}
+\newcommand{\instructorPlaceholder}{[نام استاد راهنما]}
+\newcommand{\departmentPlaceholder}{دانشکده مهندسی کامپیوتر}
+\newcommand{\universityPlaceholder}{دانشگاه صنعتی خواجه نصیرالدین طوسی، تهران}
+\newcommand{\termPlaceholder}{تابستان ۱۴۰۵}
+
+% ------------------------------------------------------------------------------
+% ۶. لینک‌ها و سرصفحه/پاصفحه
+% ------------------------------------------------------------------------------
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+    colorlinks = true,
+    linkcolor  = black,
+    urlcolor   = blue,
+    citecolor  = teal,
+    pdftitle   = {تشخیص کم‌خونی از روی تصاویر چشم با استفاده از یادگیری عمیق},
+    pdfauthor  = {\authorNamePlaceholder}
+}
+
+\usepackage{fancyhdr}
+\setlength{\headheight}{16pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[R]{تشخیص کم‌خونی از روی تصاویر چشم — فاز طبقه‌بندی}
+\fancyhead[L]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\usepackage{enumitem}
+
+\begin{document}
+
+% ------------------------------------------------------------------------------
+% صفحه‌ی عنوان
+% ------------------------------------------------------------------------------
+\begin{titlepage}
+    \thispagestyle{empty}
+    \centering
+
+    \includegraphics[width=2.8cm]{Logo.png}\par
+    \vspace{0.4cm}
+    {\large \universityPlaceholder \par}
+    {\normalsize \departmentPlaceholder \par}
+
+    \vspace{2.5cm}
+    {\Huge \bfseries تشخیص کم‌خونی از روی تصاویر چشم با استفاده از یادگیری عمیق \par}
+    \vspace{0.6cm}
+    {\Large گزارش فنی پروژه — فاز چهارم: طبقه‌بندی کم‌خونی \par}
+    \vspace{0.3cm}
+    {\large \lr{EYES-DEFY-ANEMIA Project --- Phase 4: Classification} \par}
+
+    \vspace{2.5cm}
+    \begin{tabular}{rl}
+        \textbf{نگارش:}     & \authorNamePlaceholder \\[0.3cm]
+        \textbf{شماره دانشجویی:} & \studentIdPlaceholder \\[0.3cm]
+        \textbf{استاد راهنما:}  & \instructorPlaceholder \\
+    \end{tabular}
+
+    \vfill
+    {\large \termPlaceholder \par}
+\end{titlepage}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ==============================================================================
+% بخش‌های گزارش (به‌صورت ماژولار و مرحله‌به‌مرحله بارگذاری می‌شوند)
+% ==============================================================================
+\input{sections/01_introduction.tex}
+
+% \input{sections/02_data_pipeline.tex}      % بخش ۲ — در گام بعدی افزوده می‌شود
+% \input{sections/03_architectures.tex}      % بخش ۳ — در گام بعدی افزوده می‌شود
+% \input{sections/04_implementation.tex}     % بخش ۴ — در گام بعدی افزوده می‌شود
+% \input{sections/05_results.tex}            % بخش ۵ — در گام بعدی افزوده می‌شود
+
+\end{document}

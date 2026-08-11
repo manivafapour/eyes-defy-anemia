@@ -1,0 +1,9 @@
+# Model weights (large binaries -- copied/pulled in at build or runtime)
+weights/*.pth
+weights/*.onnx
+weights/*.pt
+
+# Local env / caches
+.env
+__pycache__/
+*.py[cod]

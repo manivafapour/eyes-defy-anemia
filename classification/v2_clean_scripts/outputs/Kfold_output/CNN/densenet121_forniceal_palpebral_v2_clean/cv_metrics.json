@@ -1,0 +1,289 @@
+{
+  "combo": {
+    "combo_name": "densenet121_forniceal_palpebral_v2_clean",
+    "arch_name": "densenet121",
+    "tissue_type": "forniceal_palpebral",
+    "learning_rate": 0.018362839120451776,
+    "weight_decay": 0.0001537467136904321,
+    "dropout_rate": 0.5,
+    "source_summary": "v2_clean_scripts/outputs/densenet121_forniceal_palpebral_v2_clean/densenet121_forniceal_palpebral_v2_clean_study_summary.json",
+    "source_best_val_f1": 0.8484848484848485
+  },
+  "tag": "densenet121_forniceal_palpebral_v2_clean",
+  "shuffle_control": "none",
+  "n_splits": 5,
+  "n_repeats": 5,
+  "seed": 42,
+  "n_bootstrap": 2000,
+  "pool_composition": {
+    "n_total": 178,
+    "cells": {
+      "India_0": 23,
+      "India_1": 57,
+      "Italy_0": 79,
+      "Italy_1": 19
+    },
+    "India": {
+      "n_anemic": 57,
+      "n_healthy": 23,
+      "n_discordant_pairs": 1311
+    },
+    "Italy": {
+      "n_anemic": 19,
+      "n_healthy": 79,
+      "n_discordant_pairs": 1501
+    },
+    "overall": {
+      "n_anemic": 76,
+      "n_healthy": 102,
+      "n_discordant_pairs": 7752
+    }
+  },
+  "auc": {
+    "overall": {
+      "point": 0.8078689370485037,
+      "ci_low": 0.7390189628482973,
+      "ci_high": 0.8646833075335397,
+      "ci_half_width": 0.06283217234262123,
+      "n_valid_replicates": 2000,
+      "per_repeat": [
+        0.8036635706914343,
+        0.7893446852425181,
+        0.8076625386996905,
+        0.8169504643962849,
+        0.8217234262125902
+      ],
+      "sd_across_repeats": 0.012602545580292626
+    },
+    "India": {
+      "point": 0.560793287566743,
+      "ci_low": 0.4149504195270786,
+      "ci_high": 0.6949084668192219,
+      "ci_half_width": 0.13997902364607165,
+      "n_valid_replicates": 2000,
+      "per_repeat": [
+        0.5713196033562167,
+        0.5347063310450038,
+        0.5873379099923722,
+        0.5774218154080855,
+        0.5331807780320367
+      ],
+      "sd_across_repeats": 0.025173936051800697
+    },
+    "Italy": {
+      "point": 0.8615589606928715,
+      "ci_low": 0.7321785476349101,
+      "ci_high": 0.9626915389740173,
+      "ci_half_width": 0.1152564956695536,
+      "n_valid_replicates": 2000,
+      "per_repeat": [
+        0.8387741505662891,
+        0.8494337108594271,
+        0.8461025982678214,
+        0.860093271152565,
+        0.9133910726182546
+      ],
+      "sd_across_repeats": 0.029974090761507505
+    },
+    "india_italy_gap": {
+      "point": -0.3007656731261285,
+      "ci_low": -0.49849955102395493,
+      "ci_high": -0.10965250219660362,
+      "ci_half_width": 0.19442352441367566,
+      "n_valid_replicates": 2000,
+      "per_repeat": [
+        -0.26745454721007245,
+        -0.31472737981442334,
+        -0.2587646882754492,
+        -0.2826714557444795,
+        -0.3802102945862179
+      ],
+      "sd_across_repeats": 0.04926330194339286
+    }
+  },
+  "fold_log": [
+    {
+      "repeat": 0,
+      "fold": 0,
+      "n_epochs_run": 16,
+      "best_inner_epoch": 9,
+      "best_inner_loss": 0.5044991374015808
+    },
+    {
+      "repeat": 0,
+      "fold": 1,
+      "n_epochs_run": 22,
+      "best_inner_epoch": 15,
+      "best_inner_loss": 0.49788397550582886
+    },
+    {
+      "repeat": 0,
+      "fold": 2,
+      "n_epochs_run": 29,
+      "best_inner_epoch": 22,
+      "best_inner_loss": 0.5162320137023926
+    },
+    {
+      "repeat": 0,
+      "fold": 3,
+      "n_epochs_run": 26,
+      "best_inner_epoch": 19,
+      "best_inner_loss": 0.6331164836883545
+    },
+    {
+      "repeat": 0,
+      "fold": 4,
+      "n_epochs_run": 14,
+      "best_inner_epoch": 7,
+      "best_inner_loss": 0.6307430267333984
+    },
+    {
+      "repeat": 1,
+      "fold": 0,
+      "n_epochs_run": 27,
+      "best_inner_epoch": 20,
+      "best_inner_loss": 0.2809131443500519
+    },
+    {
+      "repeat": 1,
+      "fold": 1,
+      "n_epochs_run": 22,
+      "best_inner_epoch": 15,
+      "best_inner_loss": 0.7110880017280579
+    },
+    {
+      "repeat": 1,
+      "fold": 2,
+      "n_epochs_run": 31,
+      "best_inner_epoch": 24,
+      "best_inner_loss": 0.6999737620353699
+    },
+    {
+      "repeat": 1,
+      "fold": 3,
+      "n_epochs_run": 11,
+      "best_inner_epoch": 4,
+      "best_inner_loss": 0.5582602620124817
+    },
+    {
+      "repeat": 1,
+      "fold": 4,
+      "n_epochs_run": 13,
+      "best_inner_epoch": 6,
+      "best_inner_loss": 0.49361464381217957
+    },
+    {
+      "repeat": 2,
+      "fold": 0,
+      "n_epochs_run": 14,
+      "best_inner_epoch": 7,
+      "best_inner_loss": 0.5416141748428345
+    },
+    {
+      "repeat": 2,
+      "fold": 1,
+      "n_epochs_run": 21,
+      "best_inner_epoch": 14,
+      "best_inner_loss": 0.529090404510498
+    },
+    {
+      "repeat": 2,
+      "fold": 2,
+      "n_epochs_run": 13,
+      "best_inner_epoch": 6,
+      "best_inner_loss": 0.5337827801704407
+    },
+    {
+      "repeat": 2,
+      "fold": 3,
+      "n_epochs_run": 34,
+      "best_inner_epoch": 27,
+      "best_inner_loss": 0.33204492926597595
+    },
+    {
+      "repeat": 2,
+      "fold": 4,
+      "n_epochs_run": 24,
+      "best_inner_epoch": 17,
+      "best_inner_loss": 0.45145243406295776
+    },
+    {
+      "repeat": 3,
+      "fold": 0,
+      "n_epochs_run": 30,
+      "best_inner_epoch": 23,
+      "best_inner_loss": 0.43221500515937805
+    },
+    {
+      "repeat": 3,
+      "fold": 1,
+      "n_epochs_run": 28,
+      "best_inner_epoch": 21,
+      "best_inner_loss": 0.3173972964286804
+    },
+    {
+      "repeat": 3,
+      "fold": 2,
+      "n_epochs_run": 24,
+      "best_inner_epoch": 17,
+      "best_inner_loss": 0.451185405254364
+    },
+    {
+      "repeat": 3,
+      "fold": 3,
+      "n_epochs_run": 14,
+      "best_inner_epoch": 7,
+      "best_inner_loss": 0.6103943586349487
+    },
+    {
+      "repeat": 3,
+      "fold": 4,
+      "n_epochs_run": 12,
+      "best_inner_epoch": 5,
+      "best_inner_loss": 0.6983144283294678
+    },
+    {
+      "repeat": 4,
+      "fold": 0,
+      "n_epochs_run": 11,
+      "best_inner_epoch": 4,
+      "best_inner_loss": 0.6278751492500305
+    },
+    {
+      "repeat": 4,
+      "fold": 1,
+      "n_epochs_run": 17,
+      "best_inner_epoch": 10,
+      "best_inner_loss": 0.3521946966648102
+    },
+    {
+      "repeat": 4,
+      "fold": 2,
+      "n_epochs_run": 11,
+      "best_inner_epoch": 4,
+      "best_inner_loss": 0.7314607501029968
+    },
+    {
+      "repeat": 4,
+      "fold": 3,
+      "n_epochs_run": 24,
+      "best_inner_epoch": 17,
+      "best_inner_loss": 0.5210646986961365
+    },
+    {
+      "repeat": 4,
+      "fold": 4,
+      "n_epochs_run": 18,
+      "best_inner_epoch": 11,
+      "best_inner_loss": 0.5384469032287598
+    }
+  ],
+  "runtime_seconds": 439.0,
+  "gates": {
+    "precision_india_ci_half_width": {
+      "value": 0.13997902364607165,
+      "threshold": 0.12,
+      "passed": false
+    }
+  }
+}

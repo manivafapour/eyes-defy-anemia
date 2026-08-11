@@ -1,0 +1,17 @@
+# --- Serving layer ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+python-multipart>=0.0.9
+pillow>=10.3
+numpy>=1.26
+
+# --- Stage 2 (ConvNeXt-Tiny) inference ---
+# albumentations is pinned to the exact training version for output parity
+# (Normalize internals can differ across major versions).
+# For deployment, install the CPU torch wheels:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+torch>=2.2
+torchvision>=0.17
+albumentations==2.0.8

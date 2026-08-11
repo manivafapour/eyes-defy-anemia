@@ -1,0 +1,20 @@
+# Keep the Docker build context small: only app/ is needed to serve.
+# (Matters most for a local `docker build .` from the repo root, where these
+#  sibling dirs are multiple GB. On the HF Space repo they don't exist.)
+Segmentation/
+classification/
+Source/
+venv/
+.git/
+.claude/
+*.zip
+
+# Frontend deps + build output (both rebuilt inside the image)
+app/frontend/node_modules/
+app/frontend/dist/
+
+# Python caches / tests / local env
+**/__pycache__/
+**/*.py[cod]
+app/tests/
+.env

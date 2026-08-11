@@ -176,6 +176,41 @@ python classification/step1_cv_harness/aggregate_baseline.py
 
 ---
 
+## Post-baseline: Italy threshold recalibration (`threshold_recalibration.py`)
+
+Gate 8 only checks AUC precision; it says nothing about precision/recall/F1 at the conventional 0.5
+threshold. A fresh, country-stratified computation of those (pooled per-repeat like the AUC estimator)
+showed Italy's F1 well below India's across all 18 combos despite Italy's AUC being consistently
+*higher* — the mechanism is base-rate sensitivity (Italy's pool is ~19% anemic, so a fixed 0.5 cutoff
+sits in the wrong place), not a discrimination problem. `threshold_recalibration.py` tests whether
+recalibrating Italy's decision threshold (only) fixes this, using **nested leave-one-fold-out**
+threshold selection on the existing `oof_predictions.csv` — no retraining, no GPU.
+
+**Result: mostly negative.** Only 6/18 combos improved Italy F1 under honest nested evaluation (median
+ΔF1 −0.017). A naive, non-nested version of the same threshold search (select and evaluate on the same
+Italy data) makes it look like all 18/18 combos improve — a documented negative control quantifying how
+much of the apparent gain is overfitting to which ~104 Italy patients are in the pool, not a real,
+generalizable effect. See `outputs/threshold_recalibration/italy_threshold_recalibration.md` and
+`outputs/step1_italy_threshold_recalibration.xlsx` for the full per-combo breakdown, threshold stability
+(mean/SD across the 25 nested selections), and the naive-vs-nested comparison.
+
+```bash
+python classification/step1_cv_harness/threshold_recalibration.py
+```
+
+**Exact best-F1 threshold leaderboard (`best_threshold_leaderboard.py`).** A narrower companion: not
+"does this generalize" (above), just "what is the exact F1-maximizing threshold for Italy, given every
+prediction available." Searches every midpoint between consecutive sorted predicted probabilities
+(the true optimum, not a 0.01 grid) on all of Italy's pooled out-of-fold predictions. India stays fixed
+at 0.5; Overall combines both under that mixed policy; AUC columns are unchanged (threshold-independent).
+This is a deployment-style number, not a validated estimate — pair it with the honest nested result above
+before trusting it to generalize. Output: `outputs/best_threshold/italy_best_threshold_exact.{csv,json}`,
+`outputs/step1_leaderboard_best_threshold.xlsx`.
+
+```bash
+python classification/step1_cv_harness/best_threshold_leaderboard.py
+```
+
 ## Contract for Steps 3–5
 
 Every later intervention **must** reuse the fold assignments persisted in each combo's

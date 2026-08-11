@@ -174,8 +174,54 @@ The CNN notebook (`step1-cv-harness-cnn.ipynb`) was run for real on Kaggle and c
 - Merged the two executed-notebook commits (`99a5872`), pushed, confirmed local/remote in sync.
 - **Project author pulled and relaunched both notebooks (Save & Run All) under the fixed code — confirmed in progress as of this entry.** This is now the run that should actually produce loss-curve/confusion-matrix/ROC grids and the per-notebook `comparison/` folders.
 
-## 13. Not yet done
+## 13. Re-run completed, merged, aggregated (2026-08-09)
 
-- **Both notebooks' re-run (started 2026-08-08) has not been confirmed complete.** Once both finish: download both zips, extract into the same local `classification/step1_cv_harness/outputs/`, run `aggregate_baseline.py` once for the real 18-combo baseline + merged `comparison/` charts.
-- Gates 5 (at full scale), 7, and 8 are untested against production numbers. **Step 2 must not start until that merged run reports Step 1 clear.**
+Both notebooks' re-run finished; both zips (`step1_cv_results_cnn.zip`, `step1_cv_results_vit.zip`) downloaded and merged into the local `classification/step1_cv_harness/outputs/` (20 combo folders: 18 real + 2 negative controls), `aggregate_baseline.py` run for real against the full 18-combo set.
+
+**Gate results:** 5 (negative control) and 7 (plausibility) **pass**. **8 (precision, India AUC CI half-width ≤ 0.12) fails for all 18 combos** — observed range 0.125–0.181, worst `median_observed` well above target. Per the harness's own binding rule (README "Verification checkpoints"), this means Step 1 is **not clear** in the strict sense the gate was designed to enforce, though gates 5/7 and the underlying pair-count increase (40→1,311 India pairs) are real, large improvements over the single-split estimator this harness replaced. Recorded here rather than silently treated as cleared.
+
+Three Excel leaderboards built directly in `outputs/` (not scratchpad, per explicit request): `step1_full_leaderboard.xlsx` (every pooled AUC + hyperparameter, ranked by overall AUC), `step1_leaderboard_simple.xlsx` (Italy/India/Overall × Precision/Recall/F1/AUC only).
+
+## 14. Country-stratified precision/recall/F1 computed fresh — explains an apparent contradiction
+
+`step1_baseline.json` only ever pooled **AUC** by country; precision/recall/F1 had never been computed with country stratification anywhere in the harness. Computed fresh from each combo's `oof_predictions.csv` (pool within repeat, average across the 5 repeats — same design as `cv_stats.bootstrap_auc_cis`), at threshold 0.5.
+
+**Finding:** Italy's F1/precision/recall are consistently *worse* than India's, despite Italy's pooled AUC being consistently *higher*. Mechanism: AUC is threshold-independent and prevalence-invariant; F1/precision/recall at a fixed 0.5 cutoff are highly sensitive to base rate. Italy's pool is ~19% anemic (vs. India's ~71%), so 0.5 sits in the wrong place for how rare positives actually are — a calibration problem, not a discrimination problem. India's deficit is the reverse: mediocre AUC (0.55–0.70 in several combos) means the model doesn't rank India patients well in the first place, which no threshold choice can fix.
+
+**Correction (2026-08-10), per-model spread makes the country-level framing above too coarse.** The "Italy = calibration, India = discrimination" split was based on Italy's *pooled average* AUC being higher than India's — true on average, but it hides large per-model spread. Cross-referencing each combo's Italy AUC against its own best-achievable precision/F1 (from §16's exact threshold search): **correlation(Italy AUC, best-achievable precision) = 0.88; correlation(Italy AUC, best-achievable F1) = 0.94.** Both very strong — confirming AUC is a hard ceiling on what any threshold can achieve. 7/18 combos have Italy AUC below ~0.75 (`mobilenet_v3_small_palpebral` as low as 0.604, barely above chance) and precision stuck below 0.60 *at their own best possible threshold* — for these, Italy has the same kind of discrimination problem as India, and no threshold or reweighting scheme fixes it. **Corrected framing: split by model tier, not by country.** High-Italy-AUC models (top ~9, AUC ≳ 0.85) — threshold tuning / offline balancing are worth pursuing. Low-Italy-AUC models (bottom ~9, notably MobileNetV3-Small and EfficientNet-B0) need the same toolkit as India's discrimination problem (more/better data, focal loss, possibly reconsidering whether these lighter architectures have enough capacity to separate Italy's classes at all).
+
+## 15. Italy threshold recalibration built and run — result is mostly negative (2026-08-09)
+
+New module `threshold_recalibration.py` (README documented). Tests whether recalibrating *only* Italy's decision threshold (India left at 0.5, since its problem is discrimination, not calibration) fixes the F1 gap from §14, using **nested leave-one-fold-out** threshold selection on the existing `oof_predictions.csv` (grid search 0.01–0.99, F1-maximizing on the other 4 folds within each repeat; no fold ever sets its own threshold) — no retraining, no GPU, reuses data that already exists.
+
+**Result: only 6/18 combos improved Italy F1 under honest nested evaluation** (median delta-F1 −0.017, mean −0.012). Best genuine win: `vit_l_16_palpebral_v2_clean`, +0.041 F1 with a comparatively stable selected threshold (mean 0.75, SD 0.08 across the 25 nested selections). Worst: `regnet_y_400mf_palpebral_v2_clean`, −0.075.
+
+**Documented negative control, built specifically to quantify the leakage risk this design avoids:** the same threshold search done *without* nesting (select on all of a combo's Italy predictions, evaluate on that same data) makes it look like **18/18** combos improve. The gap between 18/18 (naive) and 6/18 (honest) is measured directly on this project's own data, not asserted from general principle — most of the apparent gain from a fixed post-hoc Italy threshold shift is overfitting to which ~104 Italy patients are in the pool, not a real, generalizable effect, consistent with the small per-fold sample (~20 Italy patients held out per fold).
+
+**Conclusion for future work:** per-country threshold recalibration is not a reliable standalone fix for Italy. If Italy precision/recall/F1 still needs to improve, the remaining options are model-level (country-stratified `pos_weight`, focal loss, oversampling Italy-anemic cases, more Italy-anemic data), not decision-rule-level.
+
+Outputs: `outputs/threshold_recalibration/italy_threshold_recalibration.{csv,json,md}`, `outputs/step1_italy_threshold_recalibration.xlsx` (3 sheets: per-combo leaderboard with naive-vs-nested columns, overall mixed-policy impact, methodology notes).
+
+## 16. Exact best-F1 threshold leaderboard, per project-author request (2026-08-10)
+
+Project author explicitly asked to set aside the generalization concern from §15 and just get the
+precise best-F1 threshold per model, plus a leaderboard styled like `step1_leaderboard_simple.xlsx`.
+New script `best_threshold_leaderboard.py`: replaces the 0.01-step grid with an exact search (every
+midpoint between consecutive sorted predicted probabilities — provably the global F1 optimum for the
+given data, not an approximation). Verified against the coarser grid: exact search never does worse,
+gains up to +0.006 F1 on some combos. Best overall: **ViT-L/16 / palpebral, threshold 0.769, Italy F1
+0.750** (precision 0.783, recall 0.720).
+
+Leaderboard (`outputs/step1_leaderboard_best_threshold.xlsx`, ranked by Italy F1 descending): Italy at
+its own exact best threshold, India fixed at 0.5 (unchanged — its deficit is AUC, not calibration),
+Overall = both combined under that mixed policy. AUC columns reused as-is from `step1_baseline.json`
+(threshold-independent). Explicitly labeled in the sheet as a deployment-style number, not a validated
+generalization estimate — the honest nested result from §15 (only 6/18 combos improve) is the one to
+cite for "does this work," this one is for "what threshold would I actually configure."
+
+## 17. Not yet done
+
+- Gate 8 (precision) failure is unresolved — Step 1 is not strictly "clear" by its own binding criterion. Whether to relax the gate, accept it as an honest limitation (23 India-healthy patients is irreducible without new data, per README), or pursue further pooling has not been decided.
+- India's AUC/discrimination deficit (§14) has no intervention attempted yet — options enumerated (error analysis on `fold_diagnostics.json`, more/targeted India data, domain-gap investigation) but nothing built.
+- Model-level Italy interventions (§15's conclusion) — country-stratified `pos_weight`, focal loss, oversampling — not yet attempted.
 - Grad-CAM itself is **not** part of Step 1. The conclusion from the design discussion: with a frozen backbone and a `GAP → Dropout → Linear` head, Grad-CAM degenerates to exact CAM (channel weights *are* the learned head weights) — mathematically exact, but **spatially resolved and cue-blind**. A colour/illumination shortcut appears as a channel reweighting, not a spatial displacement, so a perfect Grad-CAM result is fully compatible with a total colour shortcut. Inputs are already tissue-isolated crops on black, so "does it look at the conjunctiva?" is largely answered by construction. Grad-CAM is therefore demoted to a qualitative supporting exhibit; Steps 2–4 carry the quantitative argument.
