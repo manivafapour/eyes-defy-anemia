@@ -205,6 +205,144 @@ def plot_per_patient_distribution(test_df: pd.DataFrame, model_name: str, out_pa
     plt.close(fig)
 
 
+def plot_kfold_mean_curve(fold_histories: list, model_name: str, out_path) -> None:
+    """Mean +/- std train/val loss and val Dice/IoU across all folds, one
+    line each rather than one line per fold -- this is what actually
+    delivers a "smooth loss curve" (the project author's explicit request
+    for train_pretrained_kfold/): averaging several independent noisy runs
+    together is what smooths noise out, a single run's curve can't do that
+    no matter how it's plotted.
+
+    fold_histories is a list of per-fold epoch_history records (each a
+    list of per-epoch dicts, as produced by kfold_engine.py's training
+    loop) -- folds that stopped early (fewer epochs, via early stopping)
+    contribute fewer points at the tail rather than being padded/
+    extrapolated, via pandas' NaN-skipping mean/std across a DataFrame
+    indexed by epoch (one column per fold): honest about the fact that
+    fewer folds are still running by the time only the slower-converging
+    ones remain, rather than pretending a stopped fold kept producing the
+    same loss value forever."""
+    fold_dfs = [pd.DataFrame(h).set_index("epoch") for h in fold_histories if h]
+    if not fold_dfs:
+        return
+    max_epoch = max(df.index.max() for df in fold_dfs)
+    full_index = pd.RangeIndex(1, max_epoch + 1)
+
+    def _mean_std(col):
+        aligned = pd.concat([df[col].reindex(full_index) for df in fold_dfs], axis=1)
+        return aligned.mean(axis=1, skipna=True), aligned.std(axis=1, skipna=True)
+
+    train_loss_mean, train_loss_std = _mean_std("train_loss")
+    val_loss_mean, val_loss_std = _mean_std("val_loss")
+    val_dice_mean, val_dice_std = _mean_std("val_dice")
+    val_iou_mean, val_iou_std = _mean_std("val_iou")
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    epochs = full_index.to_numpy()
+    axes[0].plot(epochs, train_loss_mean, label="train_loss (mean)", color="tab:blue")
+    axes[0].fill_between(epochs, train_loss_mean - train_loss_std, train_loss_mean + train_loss_std,
+                          alpha=0.2, color="tab:blue")
+    axes[0].plot(epochs, val_loss_mean, label="val_loss (mean)", color="tab:orange")
+    axes[0].fill_between(epochs, val_loss_mean - val_loss_std, val_loss_mean + val_loss_std,
+                          alpha=0.2, color="tab:orange")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
+    axes[0].set_title(f"{model_name}\nMean loss across {len(fold_dfs)} folds (shaded = +/-1 std)")
+    axes[0].legend()
+    axes[0].grid(alpha=0.3)
+
+    axes[1].plot(epochs, val_dice_mean, label="val_dice (mean)", color="tab:blue")
+    axes[1].fill_between(epochs, val_dice_mean - val_dice_std, val_dice_mean + val_dice_std,
+                          alpha=0.2, color="tab:blue")
+    axes[1].plot(epochs, val_iou_mean, label="val_iou (mean)", color="tab:orange")
+    axes[1].fill_between(epochs, val_iou_mean - val_iou_std, val_iou_mean + val_iou_std,
+                          alpha=0.2, color="tab:orange")
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_ylabel("Score")
+    axes[1].set_ylim(0, 1.05)
+    axes[1].set_title(f"{model_name}\nMean validation Dice/IoU across {len(fold_dfs)} folds")
+    axes[1].legend()
+    axes[1].grid(alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+
+
+def plot_fold_dice_distribution(folds_df: pd.DataFrame, model_name: str, out_path) -> None:
+    """Per-fold test Dice (one bar per fold, mean line overlaid) -- the
+    K-fold analog of plot_loss_fn_comparison, which no longer applies once
+    a combo trains with one fixed, already-chosen loss function instead of
+    comparing two candidates. Shows fold-to-fold stability at a glance: a
+    tight cluster means the reported mean is trustworthy, a wide spread
+    means it isn't and should be reported with its std, not alone."""
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    fold_labels = [f"Fold {f}" for f in folds_df["fold"]]
+    mean_dice = folds_df["test_dice"].mean()
+
+    ax.bar(fold_labels, folds_df["test_dice"], color="steelblue")
+    ax.axhline(mean_dice, color="indianred", linestyle="--", label=f"Mean = {mean_dice:.4f}")
+    ax.set_ylabel("Test Dice")
+    ax.set_ylim(0, 1.05)
+    ax.set_title(f"{model_name}\nPer-fold test Dice ({len(folds_df)} folds)")
+    ax.legend()
+    ax.grid(alpha=0.3, axis="y")
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+
+
+def generate_kfold_plots(
+    plots_dir,
+    model_name: str,
+    fold_histories: list,
+    folds_df: pd.DataFrame,
+    test_metrics_summary: dict = None,
+    test_df: pd.DataFrame = None,
+) -> list:
+    """K-fold analog of generate_all_plots() below -- same 6-plot shape the
+    project author asked to keep ("the same metrics... with the same
+    plots"), but the two training-curve plots become one mean+/-std curve
+    across folds (plot_kfold_mean_curve) and the loss-fn-comparison plot
+    becomes a per-fold Dice comparison (plot_fold_dice_distribution),
+    since K-fold re-training uses one fixed loss function, not two
+    candidates. The other three plots (test summary, by-country, per-
+    patient distribution) are the SAME functions generate_all_plots()
+    uses, fed the K-fold-aggregated test_metrics_summary/test_df (pooled
+    across all folds' patients) instead of a single run's."""
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+
+    if fold_histories:
+        path = plots_dir / f"{model_name}_kfold_mean_curve.png"
+        plot_kfold_mean_curve(fold_histories, model_name, path)
+        written.append(path)
+
+    if folds_df is not None and len(folds_df):
+        path = plots_dir / f"{model_name}_fold_dice_distribution.png"
+        plot_fold_dice_distribution(folds_df, model_name, path)
+        written.append(path)
+
+    if test_metrics_summary is not None:
+        path = plots_dir / f"{model_name}_test_summary.png"
+        plot_test_set_summary(test_metrics_summary, model_name, path)
+        written.append(path)
+
+        path = plots_dir / f"{model_name}_test_by_country.png"
+        plot_test_set_by_country(test_metrics_summary, model_name, path)
+        written.append(path)
+
+    if test_df is not None and len(test_df):
+        path = plots_dir / f"{model_name}_test_per_patient_dice.png"
+        plot_per_patient_distribution(test_df, model_name, path)
+        written.append(path)
+
+    return written
+
+
 def generate_all_plots(
     plots_dir,
     model_name: str,

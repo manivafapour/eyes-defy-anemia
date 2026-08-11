@@ -179,7 +179,17 @@ class AlignedConjunctivaSegmentationDataset(Dataset):
     build_aligned_dataset_forniceal.py: 211/217 patients, 6 excluded for
     having no forniceal_palpebral crop at all, 0 genuine alignment
     failures). Explicit images_dir/masks_dir/alignment_log_csv arguments,
-    if given, override whatever tissue_type would have resolved to."""
+    if given, override whatever tissue_type would have resolved to.
+
+    patient_ids (optional): an explicit list of patient IDs to use instead
+    of filtering by the named `split` column. When given, it completely
+    overrides split-based filtering -- added for train_pretrained_kfold/'s
+    K-fold engine, where fold membership is a StratifiedKFold assignment
+    over the pooled train+val patients, not one of the three fixed named
+    splits this class otherwise reads from dataset_splits.csv. `split` is
+    still required (kept for interface consistency / clarity at call
+    sites) but is ignored whenever patient_ids is not None. Omitting
+    patient_ids reproduces this class's original behavior exactly."""
 
     def __init__(
         self,
@@ -190,6 +200,7 @@ class AlignedConjunctivaSegmentationDataset(Dataset):
         masks_dir: Path = None,
         alignment_log_csv: Path = None,
         transform=None,
+        patient_ids: list = None,
     ):
         if tissue_type not in ALIGNED_TISSUE_CONFIG:
             raise ValueError(
@@ -203,7 +214,10 @@ class AlignedConjunctivaSegmentationDataset(Dataset):
         )
 
         df = pd.read_csv(splits_csv)
-        df = df[df["split"] == split]
+        if patient_ids is not None:
+            df = df[df["patient_id"].isin(set(patient_ids))]
+        else:
+            df = df[df["split"] == split]
 
         alignment_log = pd.read_csv(alignment_log_csv)
         aligned_ids = set(alignment_log.loc[alignment_log["status"] == "ok", "patient_id"])

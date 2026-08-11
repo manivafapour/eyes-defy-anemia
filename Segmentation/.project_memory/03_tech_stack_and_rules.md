@@ -21,7 +21,11 @@ D:\khaje\EYES-DEFY-ANEMIA\
   Segmentation/
     scripts/              -- all pipeline code (phase0, dataset.py, build_aligned_dataset{,_forniceal}.py,
                               trainer_engine.py); train_pretrained/ -- 18 generated entry-point scripts
-                              (9 architectures x 2 tissue types) + _generate_scripts.py
+                              (9 architectures x 2 tissue types) + _generate_scripts.py (12/18 completed
+                              on Kaggle; 6 Transformer combos OOM'd, see .project_memory/kaggle/
+                              01_kaggle_notes.md). train_pretrained_kfold/ -- kfold_engine.py + 12
+                              generated entry-point scripts, fixed-hyperparameter 3-fold re-training of
+                              the 12 completed combos, see .project_memory/05_kfold_reevaluation.md
     models/segmentation/  -- pretrained_registry.py (9-model ARCHITECTURE_REGISTRY), transunet.py.
                               (The original unet.py/attention_unet.py/resunet.py -- 3 hand-built
                               models -- were removed 2026-08-08, superseded by the above; see
