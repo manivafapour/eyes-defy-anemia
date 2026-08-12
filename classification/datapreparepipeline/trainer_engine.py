@@ -453,12 +453,21 @@ def evaluate(model, loader, criterion, device) -> tuple:
 # --------------------------------------------------------------------------
 # Optuna objective factory
 # --------------------------------------------------------------------------
-def make_objective(arch_name: str, tissue_type: str, model_name: str):
+def make_objective(arch_name: str, tissue_type: str, model_name: str, get_dataloaders_fn=get_dataloaders):
     """Closure bound to one (architecture, tissue_type) pair. Owns a
     best_overall_val_f1 value that persists across every trial in the
     study, so the checkpoint written to disk is always the single
     best-performing model seen across the whole search (same pattern as
-    the segmentation engine's best_overall_dice)."""
+    the segmentation engine's best_overall_dice).
+
+    get_dataloaders_fn defaults to this module's own get_dataloaders (every
+    existing caller is unaffected) but can be swapped for another loader
+    with the same (tissue_type, batch_size, num_workers, image_size) ->
+    {"train","val","test"} contract -- e.g. new_way/dataset.py's balanced
+    train loader (2026-08-12). pos_weight below is computed generically
+    from whatever train_loader.dataset.df["anemic_label"] contains, so a
+    balanced loader naturally yields pos_weight~=1.0 with no special-casing
+    needed here."""
     CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint_path = CHECKPOINTS_DIR / f"best_{model_name}.pth"
     best_overall_val_f1 = -1.0
@@ -470,7 +479,7 @@ def make_objective(arch_name: str, tissue_type: str, model_name: str):
         dropout_rate = trial.suggest_categorical("dropout_rate", [0.2, 0.5])
 
         arch_config = ARCHITECTURE_REGISTRY[arch_name]
-        loaders = get_dataloaders(
+        loaders = get_dataloaders_fn(
             tissue_type, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, image_size=arch_config["input_size"]
         )
         train_loader, val_loader = loaders["train"], loaders["val"]
@@ -548,7 +557,9 @@ def make_objective(arch_name: str, tissue_type: str, model_name: str):
 # --------------------------------------------------------------------------
 # Study runner -- the single shared entry point every entry-point script calls
 # --------------------------------------------------------------------------
-def run_study(arch_name: str, tissue_type: str, model_name: str, n_trials: int = N_TRIALS) -> optuna.Study:
+def run_study(
+    arch_name: str, tissue_type: str, model_name: str, n_trials: int = N_TRIALS, get_dataloaders_fn=get_dataloaders
+) -> optuna.Study:
     if arch_name not in ARCHITECTURE_REGISTRY:
         raise ValueError(f"arch_name must be one of {list(ARCHITECTURE_REGISTRY)}, got {arch_name!r}")
 
@@ -562,7 +573,7 @@ def run_study(arch_name: str, tissue_type: str, model_name: str, n_trials: int =
     # modeling ever engages. 5 leaves a real 7-trial informed-search budget instead of 2.
     sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=5)
     study = optuna.create_study(direction="maximize", sampler=sampler)
-    study.optimize(make_objective(arch_name, tissue_type, model_name), n_trials=n_trials)
+    study.optimize(make_objective(arch_name, tissue_type, model_name, get_dataloaders_fn=get_dataloaders_fn), n_trials=n_trials)
 
     print("\n--- Optuna study complete ---")
     print(f"Model: {model_name}")

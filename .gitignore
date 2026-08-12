@@ -89,6 +89,23 @@ Segmentation/scripts/train_pretrained/output/*/*.zip
 # classification/new_way's own trained checkpoints (same large-binary
 # class of file as Segmentation/outputs/checkpoints/ above, just a
 # different module -- logs/ under the same Output/ dir stays tracked).
-classification/new_way/Output/checkpoints/
+# Wildcarded 2026-08-12 (same fix as the Segmentation pattern above, same
+# reason): Output/ was reorganized into Output/version1/, Output/version2/
+# subfolders, and the old literal .../Output/checkpoints/ path stopped
+# matching either -- verified via git check-ignore that BOTH version1/
+# and version2/'s checkpoints were silently unignored before this fix.
+classification/new_way/Output/*/checkpoints/
+
+# --------------------------------------------------------------------------
+# Added 2026-08-12, project author's explicit request: internal working-
+# memory notes should stay local-only, not published to GitHub. Previously
+# these were deliberately tracked (CLAUDE.md's own session-start
+# instruction pointed at Segmentation/.project_memory/*.md), so this is a
+# reversal of that earlier convention, not an oversight -- untracked via
+# `git rm --cached`, not deleted, so local content is unaffected.
+# --------------------------------------------------------------------------
+/memory/
+Segmentation/.project_memory/
+classification/.project_memory/
 
 

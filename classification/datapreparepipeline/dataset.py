@@ -79,7 +79,18 @@ class TissueClassificationDataset(Dataset):
     status for the requested tissue_type, joined from extraction_log.csv,
     without modifying splits.csv itself (that file is shared across both
     tissue-type variants, same pattern as the segmentation phase's aligned
-    vs. crop-based datasets)."""
+    vs. crop-based datasets).
+
+    patient_ids (optional): an explicit list of patient IDs to use instead
+    of filtering by the named `split` column. When given, it completely
+    overrides split-based filtering -- added for new_way/kfold/'s K-fold
+    engine, where fold membership is a StratifiedKFold assignment over the
+    pooled train+val patients, not one of the three fixed named splits this
+    class otherwise reads from splits.csv. `split` is still required (kept
+    for interface consistency / clarity at call sites) but is ignored
+    whenever patient_ids is not None. Omitting patient_ids reproduces this
+    class's original behavior exactly -- mirrors the identical precedent in
+    Segmentation/scripts/dataset.py's AlignedConjunctivaSegmentationDataset."""
 
     def __init__(
         self,
@@ -89,12 +100,16 @@ class TissueClassificationDataset(Dataset):
         images_dir: Path = IMAGES_DIR,
         extraction_log_csv: Path = EXTRACTION_LOG_CSV,
         transform=None,
+        patient_ids: list = None,
     ):
         if tissue_type not in TISSUE_TYPES:
             raise ValueError(f"tissue_type must be one of {TISSUE_TYPES}, got {tissue_type!r}")
 
         df = pd.read_csv(splits_csv)
-        df = df[df["split"] == split]
+        if patient_ids is not None:
+            df = df[df["patient_id"].isin(set(patient_ids))]
+        else:
+            df = df[df["split"] == split]
 
         log = pd.read_csv(extraction_log_csv)
         ok_ids = set(log.loc[log[f"{tissue_type}_status"] == "ok", "patient_id"])
