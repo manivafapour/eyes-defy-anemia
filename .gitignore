@@ -96,6 +96,13 @@ Segmentation/scripts/train_pretrained/output/*/*.zip
 # and version2/'s checkpoints were silently unignored before this fix.
 classification/new_way/Output/*/checkpoints/
 
+# classification/new_way/Fine_tune/'s own checkpoints -- same large-binary class, different
+# module again (2026-08-13's partial fine-tuning pilot programme). These are full fp32 state
+# dicts (no fp16 downcast, unlike new_way/kfold/'s checkpoints), 335MB-625MB each, ~1.4GB total
+# across the 5 saved here -- verified uncovered by any existing pattern (git check-ignore) before
+# this was added, i.e. a broad `git add` would have committed all 1.4GB without this entry.
+classification/new_way/Fine_tune/Output/checkpoints/
+
 # --------------------------------------------------------------------------
 # Added 2026-08-12, project author's explicit request: internal working-
 # memory notes should stay local-only, not published to GitHub. Previously
