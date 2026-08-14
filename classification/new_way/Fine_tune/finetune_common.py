@@ -12,6 +12,7 @@ setup that forcing it into one generic function isn't worth the
 indirection at just 2-3 models -- reconsider if a 4th one is added).
 """
 
+import json
 from pathlib import Path
 
 import matplotlib
@@ -230,3 +231,198 @@ def print_before_after(baseline: dict, finetuned: dict) -> None:
     b_gap = abs(baseline["India"].get("auc", 0) - baseline["Italy"].get("auc", 0)) if baseline["India"].get("auc") is not None and baseline["Italy"].get("auc") is not None else None
     f_gap = abs(finetuned["India"].get("auc", 0) - finetuned["Italy"].get("auc", 0)) if finetuned["India"].get("auc") is not None and finetuned["Italy"].get("auc") is not None else None
     print(f"  India/Italy AUC gap: {b_gap} -> {f_gap}  ({'WIDER -- shortcut risk' if (b_gap is not None and f_gap is not None and f_gap > b_gap) else 'not wider'})")
+
+
+# --------------------------------------------------------------------------
+# Cross-model comparison (batch 2 of the fine-tune pilot programme) -- takes
+# every model's own *_history.json (written by each engine's run_finetune(),
+# read back rather than passed in-memory so the comparison step works
+# identically whether a model was just trained in this notebook run or was
+# already on disk from an earlier session) and produces one combined view
+# across N models, generalizing plot_before_after (which only ever compared
+# one model's own before/after) to a cross-model lens.
+# --------------------------------------------------------------------------
+def load_finetune_history(logs_dir: Path, model_name: str) -> dict | None:
+    """Reads {model_name}_history.json back off disk. Returns None (not a
+    raised error) if a model hasn't been run yet in this environment --
+    callers building a partial comparison (e.g. only some models trained
+    so far) can filter these out rather than crash."""
+    path = Path(logs_dir) / f"{model_name}_history.json"
+    if not path.exists():
+        print(f"[load_finetune_history] {path} not found -- skipping {model_name}")
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def plot_cross_model_val_f1_comparison(model_histories: dict, plots_dir: Path) -> Path:
+    """model_histories: {model_name: history_dict} (as loaded by
+    load_finetune_history). Compares baseline_val_metrics['overall']['f1']
+    (the frozen-backbone starting point) against best_val_f1 (the metric
+    that actually drove checkpoint selection during fine-tuning) for every
+    model side by side."""
+    names = list(model_histories.keys())
+    baseline_f1 = [model_histories[n]["baseline_val_metrics"]["overall"]["f1"] for n in names]
+    finetuned_f1 = [model_histories[n]["best_val_f1"] for n in names]
+
+    fig, ax = plt.subplots(figsize=(max(8, 1.6 * len(names)), 5))
+    x = np.arange(len(names))
+    width = 0.35
+    ax.bar(x - width / 2, baseline_f1, width, label="frozen backbone (baseline)", color="tab:gray")
+    ax.bar(x + width / 2, finetuned_f1, width, label="fine-tuned (best epoch)", color="tab:orange")
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, rotation=30, ha="right")
+    ax.set_ylabel("Validation F1")
+    ax.set_ylim(0, 1.05)
+    ax.set_title("Cross-model: validation F1, frozen baseline vs fine-tuned")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    path = plots_dir / "cross_model_val_f1_comparison.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def plot_cross_model_test_metrics_comparison(model_histories: dict, plots_dir: Path) -> Path:
+    """One panel per metric (F1, Accuracy, AUC), each showing every model's
+    baseline vs fine-tuned sealed-TEST score -- the multi-model analog of
+    plot_before_after's left panel."""
+    names = list(model_histories.keys())
+    metrics = ["f1", "accuracy", "auc"]
+    fig, axes = plt.subplots(1, 3, figsize=(max(15, 3.2 * len(names)), 5))
+    x = np.arange(len(names))
+    width = 0.35
+    for ax, metric in zip(axes, metrics):
+        baseline_vals = [model_histories[n]["baseline_test_metrics"]["overall"].get(metric) or 0 for n in names]
+        finetuned_vals = [model_histories[n]["test_metrics"]["overall"].get(metric) or 0 for n in names]
+        ax.bar(x - width / 2, baseline_vals, width, label="baseline", color="tab:gray")
+        ax.bar(x + width / 2, finetuned_vals, width, label="fine-tuned", color="tab:orange")
+        ax.set_xticks(x)
+        ax.set_xticklabels(names, rotation=30, ha="right")
+        ax.set_ylim(0, 1.05)
+        ax.set_title(f"Test {metric.upper()}")
+        ax.grid(axis="y", alpha=0.3)
+    axes[0].legend()
+    axes[0].set_ylabel("score")
+    fig.suptitle("Cross-model: sealed TEST set, frozen baseline vs fine-tuned")
+    fig.tight_layout()
+    path = plots_dir / "cross_model_test_metrics_comparison.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def plot_cross_model_auc_gap_comparison(model_histories: dict, plots_dir: Path) -> Path:
+    """India/Italy AUC gap, baseline vs fine-tuned, across every model --
+    the multi-model analog of plot_before_after's right panel (the confound
+    check this whole programme has tracked per-model from the start)."""
+    names = list(model_histories.keys())
+
+    def gap(metrics):
+        india_auc = metrics["India"].get("auc")
+        italy_auc = metrics["Italy"].get("auc")
+        if india_auc is None or italy_auc is None:
+            return None
+        return abs(india_auc - italy_auc)
+
+    baseline_gaps = [gap(model_histories[n]["baseline_test_metrics"]) or 0 for n in names]
+    finetuned_gaps = [gap(model_histories[n]["test_metrics"]) or 0 for n in names]
+
+    fig, ax = plt.subplots(figsize=(max(8, 1.6 * len(names)), 5))
+    x = np.arange(len(names))
+    width = 0.35
+    ax.bar(x - width / 2, baseline_gaps, width, label="baseline", color="tab:gray")
+    ax.bar(x + width / 2, finetuned_gaps, width, label="fine-tuned", color="tab:orange")
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, rotation=30, ha="right")
+    ax.set_ylabel("|India AUC - Italy AUC|")
+    ax.set_title("Cross-model: India/Italy AUC gap (confound check), baseline vs fine-tuned")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    path = plots_dir / "cross_model_auc_gap_comparison.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def build_cross_model_summary_table(model_histories: dict, logs_dir: Path) -> tuple[Path, Path]:
+    """Writes both a full-detail CSV and a headline-columns markdown table,
+    same convention as classification/outputs/v2_comparison_results/
+    (comparison_table.csv + comparison_table.md) elsewhere in this project."""
+    import csv
+
+    rows = []
+    for name, h in model_histories.items():
+        b_test, f_test = h["baseline_test_metrics"], h["test_metrics"]
+        b_india_auc, f_india_auc = b_test["India"].get("auc"), f_test["India"].get("auc")
+        b_italy_auc, f_italy_auc = b_test["Italy"].get("auc"), f_test["Italy"].get("auc")
+        b_gap = abs(b_india_auc - b_italy_auc) if b_india_auc is not None and b_italy_auc is not None else None
+        f_gap = abs(f_india_auc - f_italy_auc) if f_india_auc is not None and f_italy_auc is not None else None
+        rows.append(
+            {
+                "model": name,
+                "baseline_val_f1": h["baseline_val_metrics"]["overall"]["f1"],
+                "finetuned_best_val_f1": h["best_val_f1"],
+                "baseline_test_f1": b_test["overall"]["f1"],
+                "finetuned_test_f1": f_test["overall"]["f1"],
+                "baseline_test_accuracy": b_test["overall"]["accuracy"],
+                "finetuned_test_accuracy": f_test["overall"]["accuracy"],
+                "baseline_test_auc": b_test["overall"].get("auc"),
+                "finetuned_test_auc": f_test["overall"].get("auc"),
+                "baseline_india_auc": b_india_auc,
+                "finetuned_india_auc": f_india_auc,
+                "baseline_italy_auc": b_italy_auc,
+                "finetuned_italy_auc": f_italy_auc,
+                "baseline_auc_gap": b_gap,
+                "finetuned_auc_gap": f_gap,
+                "n_epochs_run": h["n_epochs_run"],
+            }
+        )
+
+    csv_path = Path(logs_dir) / "cross_model_comparison_table.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    md_path = Path(logs_dir) / "cross_model_comparison_table.md"
+    with open(md_path, "w") as f:
+        f.write("| Model | Baseline val F1 | Fine-tuned val F1 | Test F1 (base->ft) | Test AUC (base->ft) | India AUC (base->ft) | Italy AUC (base->ft) | AUC gap (base->ft) |\n")
+        f.write("|---|---|---|---|---|---|---|---|\n")
+        for r in rows:
+            f.write(
+                f"| {r['model']} | {r['baseline_val_f1']:.4f} | {r['finetuned_best_val_f1']:.4f} | "
+                f"{r['baseline_test_f1']:.4f}->{r['finetuned_test_f1']:.4f} | "
+                f"{r['baseline_test_auc']}->{r['finetuned_test_auc']} | "
+                f"{r['baseline_india_auc']}->{r['finetuned_india_auc']} | "
+                f"{r['baseline_italy_auc']}->{r['finetuned_italy_auc']} | "
+                f"{r['baseline_auc_gap']}->{r['finetuned_auc_gap']} |\n"
+            )
+    print(f"Saved cross-model comparison table to {csv_path} and {md_path}")
+    return csv_path, md_path
+
+
+def plot_cross_model_comparison(model_histories: dict, plots_dir: Path, logs_dir: Path) -> dict:
+    """Top-level entry point: given {model_name: history_dict} for every
+    model to compare (2+), produces all 3 comparison plots plus the summary
+    table in one call. Skips models with a missing test_metrics/best
+    checkpoint (mirrors plot_before_after's own None-guard) rather than
+    crashing the whole comparison over one incomplete run."""
+    complete = {n: h for n, h in model_histories.items() if h is not None and h.get("test_metrics") is not None}
+    missing = set(model_histories) - set(complete)
+    if missing:
+        print(f"[plot_cross_model_comparison] Skipping incomplete/missing models: {sorted(missing)}")
+    if len(complete) < 2:
+        print(f"[plot_cross_model_comparison] Need at least 2 complete models to compare, got {len(complete)} -- skipping.")
+        return {}
+
+    paths = {
+        "val_f1": plot_cross_model_val_f1_comparison(complete, plots_dir),
+        "test_metrics": plot_cross_model_test_metrics_comparison(complete, plots_dir),
+        "auc_gap": plot_cross_model_auc_gap_comparison(complete, plots_dir),
+    }
+    paths["csv_table"], paths["md_table"] = build_cross_model_summary_table(complete, logs_dir)
+    print(f"Cross-model comparison built for {len(complete)} models: {sorted(complete)}")
+    return paths
