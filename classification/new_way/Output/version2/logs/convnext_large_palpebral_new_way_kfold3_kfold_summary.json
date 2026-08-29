@@ -1,0 +1,99 @@
+{
+  "model_name": "convnext_large_palpebral_new_way_kfold3",
+  "arch_name": "convnext_large",
+  "tissue_type": "palpebral",
+  "n_folds": 3,
+  "fixed_hyperparameters": {
+    "learning_rate": 0.00011137414908293505,
+    "weight_decay": 2.2059282146979313e-05,
+    "dropout_rate": 0.2
+  },
+  "batch_size": 32,
+  "max_epochs": 250,
+  "early_stopping_patience": 15,
+  "scheduler": {
+    "type": "ReduceLROnPlateau",
+    "factor": 0.5,
+    "patience": 5,
+    "min_lr": 1e-06
+  },
+  "grad_clip_max_norm": 1.0,
+  "per_fold": [
+    {
+      "fold": 1,
+      "n_train": 186,
+      "n_val": 62,
+      "n_epochs_run": 196,
+      "best_val_f1": 0.7659574468085106,
+      "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/new_way/Output/version2/checkpoints/convnext_large_palpebral_new_way_kfold3_fold1_best.pth",
+      "test_f1": 0.7857142857142857,
+      "test_accuracy": 0.8181818181818182,
+      "test_auc": 0.8383458646616542,
+      "test_india_f1": 0.8421052631578947,
+      "test_india_accuracy": 0.8,
+      "test_india_auc": 0.8409090909090909,
+      "test_italy_f1": 0.6666666666666666,
+      "test_italy_accuracy": 0.8333333333333334,
+      "test_italy_auc": 1.0
+    },
+    {
+      "fold": 2,
+      "n_train": 190,
+      "n_val": 61,
+      "n_epochs_run": 250,
+      "best_val_f1": 0.7555555555555555,
+      "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/new_way/Output/version2/checkpoints/convnext_large_palpebral_new_way_kfold3_fold2_best.pth",
+      "test_f1": 0.7692307692307693,
+      "test_accuracy": 0.8181818181818182,
+      "test_auc": 0.9022556390977444,
+      "test_india_f1": 0.7777777777777778,
+      "test_india_accuracy": 0.7333333333333333,
+      "test_india_auc": 0.8409090909090909,
+      "test_italy_f1": 0.75,
+      "test_italy_accuracy": 0.8888888888888888,
+      "test_italy_auc": 1.0
+    },
+    {
+      "fold": 3,
+      "n_train": 188,
+      "n_val": 61,
+      "n_epochs_run": 163,
+      "best_val_f1": 0.6363636363636364,
+      "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/new_way/Output/version2/checkpoints/convnext_large_palpebral_new_way_kfold3_fold3_best.pth",
+      "test_f1": 0.7333333333333333,
+      "test_accuracy": 0.7575757575757576,
+      "test_auc": 0.9323308270676691,
+      "test_india_f1": 0.7619047619047619,
+      "test_india_accuracy": 0.6666666666666666,
+      "test_india_auc": 0.8181818181818181,
+      "test_italy_f1": 0.6666666666666666,
+      "test_italy_accuracy": 0.8333333333333334,
+      "test_italy_auc": 1.0
+    }
+  ],
+  "timestamp_utc": "2026-08-12T18:05:20.714439+00:00",
+  "aggregate_across_folds": {
+    "mean": {
+      "test_f1": 0.7627594627594627,
+      "test_accuracy": 0.797979797979798,
+      "test_auc": 0.8909774436090224,
+      "test_india_f1": 0.793929267613478,
+      "test_india_accuracy": 0.7333333333333333,
+      "test_india_auc": 0.8333333333333334,
+      "test_italy_f1": 0.6944444444444443,
+      "test_italy_accuracy": 0.851851851851852,
+      "test_italy_auc": 1.0
+    },
+    "std": {
+      "test_f1": 0.026783379149541257,
+      "test_accuracy": 0.034990925405431896,
+      "test_auc": 0.04799678697294622,
+      "test_india_f1": 0.042469790065975,
+      "test_india_accuracy": 0.06666666666666671,
+      "test_india_auc": 0.013121597027037002,
+      "test_italy_f1": 0.048112522432468836,
+      "test_italy_accuracy": 0.03207501495497916,
+      "test_italy_auc": 0.0
+    }
+  }
+}

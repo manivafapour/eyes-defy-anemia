@@ -1,0 +1,99 @@
+{
+  "model_name": "maxvit_t_palpebral_new_way_kfold3",
+  "arch_name": "maxvit_t",
+  "tissue_type": "palpebral",
+  "n_folds": 3,
+  "fixed_hyperparameters": {
+    "learning_rate": 0.0008179499475211679,
+    "weight_decay": 3.752055855124284e-05,
+    "dropout_rate": 0.2
+  },
+  "batch_size": 32,
+  "max_epochs": 250,
+  "early_stopping_patience": 15,
+  "scheduler": {
+    "type": "ReduceLROnPlateau",
+    "factor": 0.5,
+    "patience": 5,
+    "min_lr": 1e-06
+  },
+  "grad_clip_max_norm": 1.0,
+  "per_fold": [
+    {
+      "fold": 1,
+      "n_train": 186,
+      "n_val": 62,
+      "n_epochs_run": 180,
+      "best_val_f1": 0.7924528301886793,
+      "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/new_way/Output/version2/checkpoints/maxvit_t_palpebral_new_way_kfold3_fold1_best.pth",
+      "test_f1": 0.7857142857142857,
+      "test_accuracy": 0.8181818181818182,
+      "test_auc": 0.9398496240601504,
+      "test_india_f1": 0.8,
+      "test_india_accuracy": 0.7333333333333333,
+      "test_india_auc": 0.8409090909090908,
+      "test_italy_f1": 0.75,
+      "test_italy_accuracy": 0.8888888888888888,
+      "test_italy_auc": 1.0
+    },
+    {
+      "fold": 2,
+      "n_train": 190,
+      "n_val": 61,
+      "n_epochs_run": 122,
+      "best_val_f1": 0.8,
+      "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/new_way/Output/version2/checkpoints/maxvit_t_palpebral_new_way_kfold3_fold2_best.pth",
+      "test_f1": 0.896551724137931,
+      "test_accuracy": 0.9090909090909091,
+      "test_auc": 0.9624060150375939,
+      "test_india_f1": 0.9090909090909091,
+      "test_india_accuracy": 0.8666666666666667,
+      "test_india_auc": 0.8409090909090908,
+      "test_italy_f1": 0.8571428571428571,
+      "test_italy_accuracy": 0.9444444444444444,
+      "test_italy_auc": 1.0
+    },
+    {
+      "fold": 3,
+      "n_train": 188,
+      "n_val": 61,
+      "n_epochs_run": 92,
+      "best_val_f1": 0.7924528301886793,
+      "checkpoint_path": "/kaggle/working/eyes-defy-anemia/classification/new_way/Output/version2/checkpoints/maxvit_t_palpebral_new_way_kfold3_fold3_best.pth",
+      "test_f1": 0.8,
+      "test_accuracy": 0.8181818181818182,
+      "test_auc": 0.9210526315789475,
+      "test_india_f1": 0.8571428571428571,
+      "test_india_accuracy": 0.8,
+      "test_india_auc": 0.8636363636363636,
+      "test_italy_f1": 0.6666666666666666,
+      "test_italy_accuracy": 0.8333333333333334,
+      "test_italy_auc": 1.0
+    }
+  ],
+  "timestamp_utc": "2026-08-12T15:16:13.332262+00:00",
+  "aggregate_across_folds": {
+    "mean": {
+      "test_f1": 0.8274220032840723,
+      "test_accuracy": 0.8484848484848485,
+      "test_auc": 0.9411027568922306,
+      "test_india_f1": 0.8554112554112554,
+      "test_india_accuracy": 0.8000000000000002,
+      "test_india_auc": 0.8484848484848485,
+      "test_italy_f1": 0.7579365079365079,
+      "test_italy_accuracy": 0.8888888888888888,
+      "test_italy_auc": 1.0
+    },
+    "std": {
+      "test_f1": 0.06029269555396072,
+      "test_accuracy": 0.05248638810814775,
+      "test_auc": 0.02070515243340633,
+      "test_india_f1": 0.05456606495788301,
+      "test_india_accuracy": 0.06666666666666671,
+      "test_india_auc": 0.013121597027037002,
+      "test_italy_f1": 0.09548578901203146,
+      "test_italy_accuracy": 0.055555555555555525,
+      "test_italy_auc": 0.0
+    }
+  }
+}
